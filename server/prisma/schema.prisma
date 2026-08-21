@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MerchantStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  UPI
+  NET_BANKING
+  WALLET
+  OTHER
+}
+
+enum RevenueEventType {
+  PAYMENT_FAILED
+  PAYMENT_SUCCEEDED
+  CHECKOUT_ABANDONED
+  SUBSCRIPTION_PAYMENT_FAILED
+  SUBSCRIPTION_RENEWED
+}
+
+enum RecoveryCaseType {
+  FAILED_PAYMENT
+  CHECKOUT_ABANDONMENT
+  SUBSCRIPTION_FAILURE
+}
+
+enum RecoveryCaseStatus {
+  OPEN
+  IN_PROGRESS
+  RECOVERED
+  FAILED
+  CLOSED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RecoveryStrategy {
+  RETRY_PAYMENT
+  SEND_PAYMENT_REMINDER
+  REQUEST_PAYMENT_METHOD_UPDATE
+  SEND_CHECKOUT_REMINDER
+  OFFER_RECOVERY_INCENTIVE
+  NO_ACTION
+}
+
+enum DecisionStatus {
+  GENERATED
+  VALIDATED
+  REJECTED
+}
+
+enum RecoveryActionType {
+  RETRY_PAYMENT
+  SEND_PAYMENT_REMINDER
+  REQUEST_PAYMENT_METHOD_UPDATE
+  SEND_CHECKOUT_REMINDER
+  OFFER_RECOVERY_INCENTIVE
+  NO_ACTION
+}
+
+enum RecoveryActionStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+  EXECUTING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
+enum OutcomeStatus {
+  SUCCESS
+  PARTIAL_SUCCESS
+  FAILED
+  NO_CHANGE
+}
+
+enum AttributionType {
+  DIRECT
+  ASSISTED
+}
+
+enum ActorType {
+  SYSTEM
+  AI
+  MERCHANT
+  ADMIN
+}
+
+model Merchant {
+  id              String         @id @default(uuid())
+  name            String
+  status          MerchantStatus @default(ACTIVE)
+  defaultCurrency String         @db.VarChar(3)
+
+  customers     Customer[]
+  transactions  Transaction[]
+  revenueEvents RevenueEvent[]
+  recoveryCases RecoveryCase[]
+  policies      Policy[]
+  auditEvents   AuditEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id                 String  @id @default(uuid())
+  merchantId         String
+  externalCustomerId String
+  email              String?
+  name               String?
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  transactions  Transaction[]
+  recoveryCases RecoveryCase[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  revenueEvents RevenueEvent[]
+
+  @@unique([merchantId, externalCustomerId])
+  @@index([merchantId])
+}
+
+model Transaction {
+  id                    String            @id @default(uuid())
+  merchantId            String
+  customerId            String
+  externalTransactionId String
+  amount                Decimal           @db.Decimal(18, 2)
+  currency              String            @db.VarChar(3)
+  status                TransactionStatus
+  paymentMethod         PaymentMethod
+  failureCode           String?
+  failureReason         String?
+  occurredAt            DateTime
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  revenueEvents RevenueEvent[]
+  recoveryCases RecoveryCase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([merchantId, externalTransactionId])
+  @@index([merchantId, status])
+  @@index([merchantId, occurredAt])
+  @@index([customerId])
+}
+
+model RevenueEvent {
+  id              String           @id @default(uuid())
+  merchantId      String
+  transactionId   String?
+  customerId      String?
+  eventType       RevenueEventType
+  externalEventId String
+  payload         Json
+  occurredAt      DateTime
+  processedAt     DateTime?
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  transaction   Transaction?   @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  recoveryCases RecoveryCase[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([merchantId, externalEventId])
+  @@index([merchantId, eventType])
+  @@index([merchantId, occurredAt])
+}
+
+model RecoveryCase {
+  id                String             @id @default(uuid())
+  merchantId        String
+  customerId        String?
+  transactionId     String?
+  revenueEventId    String?
+  caseType          RecoveryCaseType
+  status            RecoveryCaseStatus @default(OPEN)
+  priority          Priority           @default(MEDIUM)
+  riskLevel         RiskLevel?
+  estimatedRecovery Decimal?           @db.Decimal(18, 2)
+  currency          String             @db.VarChar(3)
+  openedAt          DateTime           @default(now())
+  closedAt          DateTime?
+
+  merchant     Merchant      @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  transaction  Transaction?  @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  revenueEvent RevenueEvent? @relation(fields: [revenueEventId], references: [id], onDelete: Restrict)
+
+  strategyDecisions AIStrategyDecision[]
+  recoveryActions   RecoveryAction[]
+  outcomes          Outcome[]
+  attributions      RevenueAttribution[]
+  auditEvents       AuditEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([merchantId, status])
+  @@index([merchantId, priority])
+  @@index([merchantId, createdAt])
+  @@index([customerId])
+  @@index([transactionId])
+}
+
+model AIStrategyDecision {
+  id               String           @id @default(uuid())
+  recoveryCaseId   String
+  decision         RecoveryStrategy
+  confidence       Decimal          @db.Decimal(5, 4)
+  reason           String
+  evidence         Json
+  expectedRecovery Decimal?         @db.Decimal(18, 2)
+  riskLevel        RiskLevel
+  tool             String?
+  parameters       Json?
+  model            String
+  promptVersion    String
+  status           DecisionStatus   @default(GENERATED)
+
+  recoveryCase    RecoveryCase     @relation(fields: [recoveryCaseId], references: [id], onDelete: Restrict)
+  recoveryActions RecoveryAction[]
+
+  createdAt DateTime @default(now())
+
+  @@index([recoveryCaseId, createdAt])
+}
+
+model RecoveryAction {
+  id                 String               @id @default(uuid())
+  recoveryCaseId     String
+  strategyDecisionId String?
+  actionType         RecoveryActionType
+  status             RecoveryActionStatus @default(PENDING)
+  idempotencyKey     String               @unique
+  parameters         Json?
+  executedAt         DateTime?
+  completedAt        DateTime?
+  errorCode          String?
+  errorMessage       String?
+
+  recoveryCase     RecoveryCase        @relation(fields: [recoveryCaseId], references: [id], onDelete: Restrict)
+  strategyDecision AIStrategyDecision? @relation(fields: [strategyDecisionId], references: [id], onDelete: Restrict)
+  outcomes         Outcome[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([recoveryCaseId])
+  @@index([status])
+}
+
+model Policy {
+  id              String             @id @default(uuid())
+  merchantId      String
+  name            String
+  actionType      RecoveryActionType
+  enabled         Boolean            @default(true)
+  maxAmount       Decimal?           @db.Decimal(18, 2)
+  maxAttempts     Int?
+  cooldownSeconds Int?
+  configuration   Json?
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([merchantId, enabled])
+}
+
+model Outcome {
+  id               String        @id @default(uuid())
+  recoveryCaseId   String
+  recoveryActionId String
+  status           OutcomeStatus
+  failureReason    String?
+  recoveredAmount  Decimal?      @db.Decimal(18, 2)
+  currency         String        @db.VarChar(3)
+  occurredAt       DateTime
+
+  recoveryCase   RecoveryCase         @relation(fields: [recoveryCaseId], references: [id], onDelete: Restrict)
+  recoveryAction RecoveryAction       @relation(fields: [recoveryActionId], references: [id], onDelete: Restrict)
+  attributions   RevenueAttribution[]
+
+  createdAt DateTime @default(now())
+
+  @@index([recoveryCaseId])
+  @@index([status])
+  @@index([occurredAt])
+}
+
+model RevenueAttribution {
+  id              String          @id @default(uuid())
+  recoveryCaseId  String
+  outcomeId       String
+  amount          Decimal         @db.Decimal(18, 2)
+  currency        String          @db.VarChar(3)
+  attributionType AttributionType
+  attributedAt    DateTime
+
+  recoveryCase RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Restrict)
+  outcome      Outcome      @relation(fields: [outcomeId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([recoveryCaseId])
+  @@index([outcomeId])
+  @@index([attributedAt])
+}
+
+model AuditEvent {
+  id             String    @id @default(uuid())
+  merchantId     String
+  recoveryCaseId String?
+  eventType      String
+  actorType      ActorType
+  actorId        String?
+  metadata       Json
+
+  merchant     Merchant      @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  recoveryCase RecoveryCase? @relation(fields: [recoveryCaseId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([merchantId, createdAt])
+  @@index([recoveryCaseId, createdAt])
+  @@index([eventType])
+}
