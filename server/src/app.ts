@@ -1,17 +1,12 @@
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
+import healthRoutes from "./modules/health/health.routes";
 
 const app = express();
 
 app.use(cors());
 app.use(helmet());
 app.use(express.json());
-app.get('/health', (_req, res) => {
-    res.status(200).json({
-        status : "ok",
-        service: "ai-revenue-recovery",
-    });
-});
-
+app.use("/health", healthRoutes);
 export default app;
