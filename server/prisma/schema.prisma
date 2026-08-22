@@ -300,13 +300,14 @@ model Policy {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([merchantId, actionType])
   @@index([merchantId, enabled])
 }
 
 model Outcome {
   id               String        @id @default(uuid())
   recoveryCaseId   String
-  recoveryActionId String
+  recoveryActionId String        @unique
   status           OutcomeStatus
   failureReason    String?
   recoveredAmount  Decimal?      @db.Decimal(18, 2)
