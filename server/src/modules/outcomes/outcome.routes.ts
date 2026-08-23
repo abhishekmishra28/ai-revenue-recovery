@@ -1,0 +1,26 @@
+import { Router } from "express";
+
+import {
+  getOutcomesController,
+  getOutcomeByIdController,
+  getOutcomesForRecoveryCaseController,
+  getOutcomeForRecoveryActionController,
+} from "./outcome.controller";
+
+const router = Router();
+
+router.get("/", getOutcomesController);
+
+router.get(
+  "/recovery-case/:recoveryCaseId",
+  getOutcomesForRecoveryCaseController,
+);
+
+router.get(
+  "/action/:recoveryActionId",
+  getOutcomeForRecoveryActionController,
+);
+
+router.get("/:id", getOutcomeByIdController);
+
+export default router;

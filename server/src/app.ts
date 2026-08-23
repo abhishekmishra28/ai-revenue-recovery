@@ -9,6 +9,8 @@ import transactionRoutes from "./modules/transactions/transaction.routes";
 import revenueEventRoutes from "./modules/revenue-events/revenue-event.routes";
 import aiDecisionRoutes from "./modules/ai-decisions/ai-decision.routes";
 import recoveryActionRoutes from "./modules/recovery-actions/recovery-action.routes";
+import outcomeRoutes from "./modules/outcomes/outcome.routes";
+import auditEventRoutes from "./modules/audit-events/audit-event.routes";
 
 const app = express();
 
@@ -24,5 +26,7 @@ app.use("/transactions", transactionRoutes);
 app.use("/revenue-events", revenueEventRoutes);
 app.use("/ai-decisions", aiDecisionRoutes);
 app.use("/recovery-actions", recoveryActionRoutes);
+app.use("/outcomes", outcomeRoutes);
+app.use("/audit-events", auditEventRoutes);
 
 export default app;
