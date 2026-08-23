@@ -5,6 +5,8 @@ import healthRoutes from "./modules/health/health.routes";
 import merchantRoutes from "./modules/merchants/merchant.routes";
 import customerRoutes from "./modules/customers/customer.routes";
 import recoveryCaseRoutes from "./modules/recovery-cases/recovery-case.routes";
+import transactionRoutes from "./modules/transactions/transaction.routes";
+import revenueEventRoutes from "./modules/revenue-events/revenue-event.routes";
 
 const app = express();
 
@@ -16,5 +18,7 @@ app.use("/health", healthRoutes);
 app.use("/merchants", merchantRoutes);
 app.use("/customers", customerRoutes);
 app.use("/recovery-cases", recoveryCaseRoutes);
+app.use("/transactions", transactionRoutes);
+app.use("/revenue-events", revenueEventRoutes);
 
 export default app;
