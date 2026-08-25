@@ -11,6 +11,7 @@ import aiDecisionRoutes from "./modules/ai-decisions/ai-decision.routes";
 import recoveryActionRoutes from "./modules/recovery-actions/recovery-action.routes";
 import outcomeRoutes from "./modules/outcomes/outcome.routes";
 import auditEventRoutes from "./modules/audit-events/audit-event.routes";
+import recoveryEngineRoutes from "./modules/recovery-engine/recovery-engine.routes";
 
 const app = express();
 
@@ -28,5 +29,6 @@ app.use("/ai-decisions", aiDecisionRoutes);
 app.use("/recovery-actions", recoveryActionRoutes);
 app.use("/outcomes", outcomeRoutes);
 app.use("/audit-events", auditEventRoutes);
+app.use("/recovery-engine", recoveryEngineRoutes);
 
 export default app;
