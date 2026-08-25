@@ -11,10 +11,13 @@ export const executeRecoveryAction = async (
    * 1. Fetch the action
    */
   const action = await prisma.recoveryAction.findUnique({
-    where: {
-      id: recoveryActionId,
-    },
-  });
+        where: {
+            id: recoveryActionId,
+        },
+        include: {
+            recoveryCase: true,
+        },
+    });
 
   if (!action) {
     throw new Error("Recovery action not found");
@@ -112,8 +115,8 @@ export const executeRecoveryAction = async (
           failureReason: executionResult.success
             ? null
             : executionResult.message,
-          recoveredAmount: null,
-          currency: "INR",
+          recoveredAmount: action.recoveryCase.estimatedRecovery,
+          currency: action.recoveryCase.currency,
           occurredAt: new Date(),
         },
       });

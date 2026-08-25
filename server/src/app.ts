@@ -16,6 +16,7 @@ import eventProcessorRoutes from "./modules/event-processing/event-processor.rou
 import aiStrategyEngineRoutes from "./modules/ai-strategy-engine/ai-strategy-engine.routes";
 import recoveryActionEngineRoutes from "./modules/recovery-action-engine/recovery-action-engine.routes";
 import actionExecutionRoutes from "./modules/action-execution/action-execution.routes";
+import revenueAttributionRoutes from "./modules/revenue-attribution/revenue-attribution.routes";
 
 const app = express();
 
@@ -38,5 +39,5 @@ app.use("/event-processing", eventProcessorRoutes);
 app.use("/ai-strategy-engine", aiStrategyEngineRoutes);
 app.use("/recovery-action-engine", recoveryActionEngineRoutes);
 app.use("/action-execution", actionExecutionRoutes);
-
+app.use("/revenue-attribution", revenueAttributionRoutes);
 export default app;
