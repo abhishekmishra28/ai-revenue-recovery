@@ -1,9 +1,13 @@
 import { prisma } from "../../lib/prisma";
+
 import {
   RecoveryActionStatus,
   RecoveryActionType,
   DecisionStatus,
+  ActorType,
 } from "@prisma/client";
+
+import { createAuditEvent } from "../audit/audit.service";
 
 const mapStrategyToAction = (
   decision: string,
@@ -45,6 +49,9 @@ export const createRecoveryAction = async (
       where: {
         id: strategyDecisionId,
       },
+      include: {
+        recoveryCase: true,
+      },
     });
 
   if (!decision) {
@@ -52,12 +59,12 @@ export const createRecoveryAction = async (
   }
 
   /*
-   * 2. Only validated/generated decisions
+   * 2. Only validated decisions
    *    can produce recovery actions.
    */
   if (decision.status !== DecisionStatus.VALIDATED) {
     throw new Error(
-        "AI strategy decision must be validated before creating a recovery action",
+      "AI strategy decision must be validated before creating a recovery action",
     );
   }
 
@@ -108,7 +115,29 @@ export const createRecoveryAction = async (
 
       idempotencyKey,
 
-      parameters: decision.parameters ?? undefined,
+      parameters:
+        decision.parameters ?? undefined,
+    },
+  });
+
+  /*
+   * 7. Record audit event.
+   */
+  await createAuditEvent({
+    merchantId: decision.recoveryCase.merchantId,
+
+    recoveryCaseId: decision.recoveryCaseId,
+
+    eventType: "RECOVERY_ACTION_CREATED",
+
+    actorType: ActorType.SYSTEM,
+
+    metadata: {
+      recoveryActionId: action.id,
+      strategyDecisionId: decision.id,
+      actionType: action.actionType,
+      status: action.status,
+      idempotencyKey: action.idempotencyKey,
     },
   });
 

@@ -1,8 +1,10 @@
 import { prisma } from "../../lib/prisma";
 import {
+  ActorType,
   DecisionStatus,
   RecoveryActionStatus,
 } from "@prisma/client";
+import { createAuditEvent } from "../audit/audit.service";
 
 export const validateStrategyDecision = async (
   strategyDecisionId: string,
@@ -22,8 +24,7 @@ export const validateStrategyDecision = async (
 
   /*
    * Idempotency:
-   * A decision that has already been validated/rejected
-   * should not be evaluated again.
+   * Do not evaluate an already processed decision again.
    */
   if (
     decision.status === DecisionStatus.VALIDATED ||
@@ -42,39 +43,76 @@ export const validateStrategyDecision = async (
   });
 
   /*
-   * No policy means the action is not explicitly allowed.
+   * No policy or disabled policy = reject.
    */
   if (!policy || !policy.enabled) {
-    return prisma.aIStrategyDecision.update({
-      where: {
-        id: decision.id,
-      },
-      data: {
-        status: DecisionStatus.REJECTED,
+    const rejectedDecision =
+      await prisma.aIStrategyDecision.update({
+        where: {
+          id: decision.id,
+        },
+        data: {
+          status: DecisionStatus.REJECTED,
+        },
+      });
+
+    await createAuditEvent({
+      merchantId: decision.recoveryCase.merchantId,
+      recoveryCaseId: decision.recoveryCaseId,
+      eventType: "AI_STRATEGY_REJECTED",
+      actorType: ActorType.SYSTEM,
+      metadata: {
+        strategyDecisionId: decision.id,
+        decision: decision.decision,
+        reason: !policy
+          ? "No merchant policy exists for this action"
+          : "Merchant policy is disabled",
       },
     });
+
+    return rejectedDecision;
   }
 
   /*
-   * Check maximum recovery amount.
+   * Maximum recovery amount check.
    */
   if (
     policy.maxAmount !== null &&
     decision.recoveryCase.estimatedRecovery !== null &&
-    decision.recoveryCase.estimatedRecovery.gt(policy.maxAmount)
+    decision.recoveryCase.estimatedRecovery.gt(
+      policy.maxAmount,
+    )
   ) {
-    return prisma.aIStrategyDecision.update({
-      where: {
-        id: decision.id,
-      },
-      data: {
-        status: DecisionStatus.REJECTED,
+    const rejectedDecision =
+      await prisma.aIStrategyDecision.update({
+        where: {
+          id: decision.id,
+        },
+        data: {
+          status: DecisionStatus.REJECTED,
+        },
+      });
+
+    await createAuditEvent({
+      merchantId: decision.recoveryCase.merchantId,
+      recoveryCaseId: decision.recoveryCaseId,
+      eventType: "AI_STRATEGY_REJECTED",
+      actorType: ActorType.SYSTEM,
+      metadata: {
+        strategyDecisionId: decision.id,
+        decision: decision.decision,
+        reason: "Estimated recovery exceeds merchant policy maximum",
+        estimatedRecovery:
+          decision.recoveryCase.estimatedRecovery.toString(),
+        maxAmount: policy.maxAmount.toString(),
       },
     });
+
+    return rejectedDecision;
   }
 
   /*
-   * Check maximum attempts.
+   * Maximum attempts check.
    */
   if (policy.maxAttempts !== null) {
     const attempts = await prisma.recoveryAction.count({
@@ -93,26 +131,63 @@ export const validateStrategyDecision = async (
     });
 
     if (attempts >= policy.maxAttempts) {
-      return prisma.aIStrategyDecision.update({
-        where: {
-          id: decision.id,
-        },
-        data: {
-          status: DecisionStatus.REJECTED,
+      const rejectedDecision =
+        await prisma.aIStrategyDecision.update({
+          where: {
+            id: decision.id,
+          },
+          data: {
+            status: DecisionStatus.REJECTED,
+          },
+        });
+
+      await createAuditEvent({
+        merchantId: decision.recoveryCase.merchantId,
+        recoveryCaseId: decision.recoveryCaseId,
+        eventType: "AI_STRATEGY_REJECTED",
+        actorType: ActorType.SYSTEM,
+        metadata: {
+          strategyDecisionId: decision.id,
+          decision: decision.decision,
+          reason:
+            "Maximum recovery attempts exceeded",
+          attempts,
+          maxAttempts: policy.maxAttempts,
         },
       });
+
+      return rejectedDecision;
     }
   }
 
   /*
    * All policy checks passed.
    */
-  return prisma.aIStrategyDecision.update({
-    where: {
-      id: decision.id,
-    },
-    data: {
-      status: DecisionStatus.VALIDATED,
+  const validatedDecision =
+    await prisma.aIStrategyDecision.update({
+      where: {
+        id: decision.id,
+      },
+      data: {
+        status: DecisionStatus.VALIDATED,
+      },
+    });
+
+  await createAuditEvent({
+    merchantId: decision.recoveryCase.merchantId,
+    recoveryCaseId: decision.recoveryCaseId,
+    eventType: "AI_STRATEGY_VALIDATED",
+    actorType: ActorType.SYSTEM,
+    metadata: {
+      strategyDecisionId: decision.id,
+      decision: decision.decision,
+      estimatedRecovery:
+        decision.recoveryCase.estimatedRecovery?.toString() ??
+        null,
+      policyId: policy.id,
+      policyName: policy.name,
     },
   });
+
+  return validatedDecision;
 };

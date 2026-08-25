@@ -1,70 +1,6 @@
 import { prisma } from "../../lib/prisma";
-import {
-  RecoveryCaseType,
-  RecoveryStrategy,
-  RiskLevel,
-  DecisionStatus,
-} from "@prisma/client";
-
-type StrategyDecisionResult = {
-  decision: RecoveryStrategy;
-  confidence: number;
-  reason: string;
-  riskLevel: RiskLevel;
-};
-
-const determineStrategy = (
-  caseType: RecoveryCaseType,
-  riskLevel: RiskLevel,
-): StrategyDecisionResult => {
-  switch (caseType) {
-    case RecoveryCaseType.FAILED_PAYMENT:
-      if (riskLevel === RiskLevel.HIGH) {
-        return {
-          decision: RecoveryStrategy.REQUEST_PAYMENT_METHOD_UPDATE,
-          confidence: 0.88,
-          reason:
-            "High-risk failed payment should request a payment method update before attempting another charge.",
-          riskLevel,
-        };
-      }
-
-      return {
-        decision: RecoveryStrategy.RETRY_PAYMENT,
-        confidence: 0.91,
-        reason:
-          "The payment failed and the case is suitable for a payment retry.",
-        riskLevel,
-      };
-
-    case RecoveryCaseType.CHECKOUT_ABANDONMENT:
-      return {
-        decision: RecoveryStrategy.SEND_CHECKOUT_REMINDER,
-        confidence: 0.89,
-        reason:
-          "The customer abandoned checkout, so a checkout reminder is the most appropriate recovery action.",
-        riskLevel,
-      };
-
-    case RecoveryCaseType.SUBSCRIPTION_FAILURE:
-      return {
-        decision: RecoveryStrategy.SEND_PAYMENT_REMINDER,
-        confidence: 0.87,
-        reason:
-          "The subscription payment failed, so a payment reminder should be sent before further recovery actions.",
-        riskLevel,
-      };
-
-    default:
-      return {
-        decision: RecoveryStrategy.NO_ACTION,
-        confidence: 0.99,
-        reason:
-          "No supported recovery strategy was identified for this case.",
-        riskLevel,
-      };
-  }
-};
+import { ActorType, RecoveryStrategy, RiskLevel } from "@prisma/client";
+import { createAuditEvent } from "../audit/audit.service";
 
 export const generateStrategyDecision = async (
   recoveryCaseId: string,
@@ -73,71 +9,139 @@ export const generateStrategyDecision = async (
     where: {
       id: recoveryCaseId,
     },
+    include: {
+      customer: true,
+      transaction: true,
+      revenueEvent: true,
+    },
   });
 
   if (!recoveryCase) {
     throw new Error("Recovery case not found");
   }
 
-  const existingDecision =
-    await prisma.aIStrategyDecision.findFirst({
-      where: {
-        recoveryCaseId,
-      },
-      orderBy: {
-        createdAt: "desc",
+  /*
+   * Basic rule-based strategy selection.
+   *
+   * This is intentionally deterministic for the current
+   * recovery engine. The model field allows us to replace
+   * this with an actual AI model later.
+   */
+  let decision: RecoveryStrategy;
+  let reason: string;
+  let riskLevel: RiskLevel;
+  let confidence: number;
+
+  switch (recoveryCase.caseType) {
+    case "FAILED_PAYMENT":
+      decision = RecoveryStrategy.RETRY_PAYMENT;
+      reason =
+        "Payment failure detected. Retrying the payment is the primary recovery strategy.";
+      riskLevel = RiskLevel.MEDIUM;
+      confidence = 0.9;
+      break;
+
+    case "CHECKOUT_ABANDONMENT":
+      decision = RecoveryStrategy.SEND_CHECKOUT_REMINDER;
+      reason =
+        "Checkout was abandoned. A checkout reminder can encourage the customer to complete the payment.";
+      riskLevel = RiskLevel.LOW;
+      confidence = 0.86;
+      break;
+
+    case "SUBSCRIPTION_FAILURE":
+      decision =
+        RecoveryStrategy.REQUEST_PAYMENT_METHOD_UPDATE;
+      reason =
+        "Subscription payment failed. Requesting a payment method update is appropriate for recurring payment recovery.";
+      riskLevel = RiskLevel.MEDIUM;
+      confidence = 0.88;
+      break;
+
+    default:
+      decision = RecoveryStrategy.NO_ACTION;
+      reason =
+        "No suitable recovery strategy was identified.";
+      riskLevel = RiskLevel.LOW;
+      confidence = 0.5;
+  }
+
+  /*
+   * Estimate recoverable revenue.
+   */
+  const expectedRecovery =
+    recoveryCase.estimatedRecovery ?? null;
+
+  /*
+   * Create the AI strategy decision.
+   */
+  const strategyDecision =
+    await prisma.aIStrategyDecision.create({
+      data: {
+        recoveryCaseId: recoveryCase.id,
+
+        decision,
+
+        confidence,
+
+        reason,
+
+        evidence: {
+          caseType: recoveryCase.caseType,
+          priority: recoveryCase.priority,
+          riskLevel,
+          transactionStatus:
+            recoveryCase.transaction?.status ?? null,
+          paymentMethod:
+            recoveryCase.transaction?.paymentMethod ?? null,
+          failureCode:
+            recoveryCase.transaction?.failureCode ?? null,
+        },
+
+        expectedRecovery,
+
+        riskLevel,
+
+        tool: "rule-based-recovery-engine",
+
+        parameters: {
+          recoveryCaseId: recoveryCase.id,
+        },
+
+        model: "recovery-rule-engine",
+
+        promptVersion: "v1",
+
+        status: "GENERATED",
       },
     });
 
-  if (existingDecision) {
-    return existingDecision;
-  }
+  /*
+   * Record the AI decision in the audit trail.
+   */
+  await createAuditEvent({
+    merchantId: recoveryCase.merchantId,
 
-  const riskLevel =
-    recoveryCase.riskLevel ?? RiskLevel.MEDIUM;
+    recoveryCaseId: recoveryCase.id,
 
-  const strategy = determineStrategy(
-    recoveryCase.caseType,
-    riskLevel,
-  );
+    eventType: "AI_STRATEGY_GENERATED",
 
-  const decision = await prisma.aIStrategyDecision.create({
-    data: {
-      recoveryCaseId: recoveryCase.id,
+    actorType: ActorType.AI,
 
-      decision: strategy.decision,
-
-      confidence: strategy.confidence,
-
-      reason: strategy.reason,
-
-      evidence: {
-        caseType: recoveryCase.caseType,
-        priority: recoveryCase.priority,
-        riskLevel,
-        estimatedRecovery:
-          recoveryCase.estimatedRecovery,
-        currency: recoveryCase.currency,
-      },
-
+    metadata: {
+      strategyDecisionId: strategyDecision.id,
+      decision: strategyDecision.decision,
+      confidence:
+        strategyDecision.confidence.toString(),
+      riskLevel: strategyDecision.riskLevel,
       expectedRecovery:
-        recoveryCase.estimatedRecovery,
-
-      riskLevel,
-
-      tool: "deterministic-strategy-engine",
-
-      parameters: {
-        strategyVersion: "v1",
-      },
-
-      model: "rule-based-v1",
-
-      promptVersion: "none",
-
-      status: DecisionStatus.GENERATED,
+        strategyDecision.expectedRecovery?.toString() ??
+        null,
+      reason: strategyDecision.reason,
+      model: strategyDecision.model,
+      promptVersion: strategyDecision.promptVersion,
     },
   });
 
-  return decision;
+  return strategyDecision;
 };
