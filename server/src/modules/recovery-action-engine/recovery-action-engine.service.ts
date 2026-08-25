@@ -55,12 +55,9 @@ export const createRecoveryAction = async (
    * 2. Only validated/generated decisions
    *    can produce recovery actions.
    */
-  if (
-    decision.status !== DecisionStatus.GENERATED &&
-    decision.status !== DecisionStatus.VALIDATED
-  ) {
+  if (decision.status !== DecisionStatus.VALIDATED) {
     throw new Error(
-      "AI strategy decision cannot create a recovery action",
+        "AI strategy decision must be validated before creating a recovery action",
     );
   }
 

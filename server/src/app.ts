@@ -17,6 +17,7 @@ import aiStrategyEngineRoutes from "./modules/ai-strategy-engine/ai-strategy-eng
 import recoveryActionEngineRoutes from "./modules/recovery-action-engine/recovery-action-engine.routes";
 import actionExecutionRoutes from "./modules/action-execution/action-execution.routes";
 import revenueAttributionRoutes from "./modules/revenue-attribution/revenue-attribution.routes";
+import policyEngineRoutes from "./modules/policy-engine/policy-engine.routes";
 
 const app = express();
 
@@ -40,4 +41,5 @@ app.use("/ai-strategy-engine", aiStrategyEngineRoutes);
 app.use("/recovery-action-engine", recoveryActionEngineRoutes);
 app.use("/action-execution", actionExecutionRoutes);
 app.use("/revenue-attribution", revenueAttributionRoutes);
+app.use("/policy-engine", policyEngineRoutes);
 export default app;
