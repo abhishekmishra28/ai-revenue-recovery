@@ -143,3 +143,158 @@ export const createRecoveryAction = async (
 
   return action;
 };
+export const executeRecoveryAction = async (
+  recoveryActionId: string,
+) => {
+  const action = await prisma.recoveryAction.findUnique({
+    where: {
+      id: recoveryActionId,
+    },
+    include: {
+      recoveryCase: true,
+    },
+  });
+
+  if (!action) {
+    throw new Error("Recovery action not found");
+  }
+
+  /*
+   * Idempotency:
+   * Already completed actions should not execute again.
+   */
+  if (
+    action.status === RecoveryActionStatus.SUCCEEDED ||
+    action.status === RecoveryActionStatus.FAILED
+  ) {
+    return action;
+  }
+
+  /*
+   * Only pending actions can start execution.
+   */
+  if (action.status !== RecoveryActionStatus.PENDING) {
+    throw new Error(
+      "Recovery action must be pending before execution",
+    );
+  }
+
+  /*
+   * Mark action as executing.
+   */
+  const executingAction =
+    await prisma.recoveryAction.update({
+      where: {
+        id: action.id,
+      },
+      data: {
+        status: RecoveryActionStatus.EXECUTING,
+      },
+    });
+
+  /*
+   * Audit execution start.
+   */
+  await createAuditEvent({
+    merchantId: action.recoveryCase.merchantId,
+    recoveryCaseId: action.recoveryCaseId,
+    eventType: "RECOVERY_ACTION_EXECUTING",
+    actorType: ActorType.SYSTEM,
+    metadata: {
+      recoveryActionId: action.id,
+      actionType: action.actionType,
+      status: executingAction.status,
+    },
+  });
+
+  try {
+    /*
+     * Temporary execution simulation.
+     *
+     * Actual payment/email/provider integrations
+     * will be connected later.
+     */
+    const executionResult = {
+      success: true,
+      message: "Recovery action executed successfully",
+    };
+
+    if (!executionResult.success) {
+      throw new Error(executionResult.message);
+    }
+
+    /*
+     * Mark action as successful.
+     */
+    const successfulAction =
+      await prisma.recoveryAction.update({
+        where: {
+          id: action.id,
+        },
+        data: {
+          status: RecoveryActionStatus.SUCCEEDED,
+          executedAt: new Date(),
+          result: executionResult,
+        },
+      });
+
+    /*
+     * Audit successful execution.
+     */
+    await createAuditEvent({
+      merchantId: action.recoveryCase.merchantId,
+      recoveryCaseId: action.recoveryCaseId,
+      eventType: "RECOVERY_ACTION_SUCCEEDED",
+      actorType: ActorType.SYSTEM,
+      metadata: {
+        recoveryActionId: action.id,
+        actionType: action.actionType,
+        status: successfulAction.status,
+        result: executionResult,
+      },
+    });
+
+    return successfulAction;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Unknown execution error";
+
+    /*
+     * Mark action as failed.
+     */
+    const failedAction =
+      await prisma.recoveryAction.update({
+        where: {
+          id: action.id,
+        },
+        data: {
+          status: RecoveryActionStatus.FAILED,
+          executedAt: new Date(),
+          result: {
+            success: false,
+            error: errorMessage,
+          },
+        },
+      });
+
+    /*
+     * Audit failed execution.
+     */
+    await createAuditEvent({
+      merchantId: action.recoveryCase.merchantId,
+      recoveryCaseId: action.recoveryCaseId,
+      eventType: "RECOVERY_ACTION_FAILED",
+      actorType: ActorType.SYSTEM,
+      metadata: {
+        recoveryActionId: action.id,
+        actionType: action.actionType,
+        status: failedAction.status,
+        error: errorMessage,
+      },
+    });
+
+    return failedAction;
+  }
+};

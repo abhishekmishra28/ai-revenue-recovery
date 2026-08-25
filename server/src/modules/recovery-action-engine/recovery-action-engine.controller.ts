@@ -2,7 +2,12 @@ import { Request, Response } from "express";
 
 import {
   createRecoveryAction,
+  executeRecoveryAction,
 } from "./recovery-action-engine.service";
+
+type ActionParams = {
+  recoveryActionId: string;
+};
 
 type StrategyDecisionParams = {
   strategyDecisionId: string;
@@ -15,12 +20,12 @@ export const createRecoveryActionController = async (
   try {
     const { strategyDecisionId } = req.params;
 
-    const action = await createRecoveryAction(
+    const data = await createRecoveryAction(
       strategyDecisionId,
     );
 
-    res.status(200).json({
-      data: action,
+    res.status(201).json({
+      data,
     });
   } catch (error) {
     console.error(
@@ -28,46 +33,41 @@ export const createRecoveryActionController = async (
       error,
     );
 
-    if (
-      error instanceof Error &&
-      error.message ===
-        "AI strategy decision not found"
-    ) {
-      res.status(404).json({
-        error: "AI strategy decision not found",
-      });
-
-      return;
-    }
-
-    if (
-      error instanceof Error &&
-      error.message.includes(
-        "cannot create a recovery action",
-      )
-    ) {
-      res.status(409).json({
-        error: error.message,
-      });
-
-      return;
-    }
-
-    if (
-      error instanceof Error &&
-      error.message.includes(
-        "Unsupported recovery strategy",
-      )
-    ) {
-      res.status(400).json({
-        error: error.message,
-      });
-
-      return;
-    }
-
-    res.status(500).json({
-      error: "Failed to create recovery action",
+    res.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to create recovery action",
     });
   }
 };
+
+export const executeRecoveryActionController =
+  async (
+    req: Request<ActionParams>,
+    res: Response,
+  ) => {
+    try {
+      const { recoveryActionId } = req.params;
+
+      const data = await executeRecoveryAction(
+        recoveryActionId,
+      );
+
+      res.status(200).json({
+        data,
+      });
+    } catch (error) {
+      console.error(
+        "Failed to execute recovery action:",
+        error,
+      );
+
+      res.status(400).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to execute recovery action",
+      });
+    }
+  };

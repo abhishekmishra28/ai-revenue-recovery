@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
-
+import { Prisma } from "@prisma/client";
 import {
   getOutcomes,
   getOutcome,
   getOutcomesForRecoveryCase,
   getOutcomeForRecoveryAction,
+  createOutcome,
 } from "./outcome.service";
 
 type OutcomeParams = {
@@ -123,6 +124,79 @@ export const getOutcomeForRecoveryActionController = async (
 
     res.status(500).json({
       error: "Failed to fetch outcome",
+    });
+  }
+};
+type CreateOutcomeBody = {
+  recoveryActionId: string;
+  status: string;
+  failureReason?: string;
+  recoveredAmount?: string;
+  currency: string;
+};
+
+export const createOutcomeController = async (
+  req: Request<{}, {}, CreateOutcomeBody>,
+  res: Response,
+) => {
+  try {
+    const {
+      recoveryActionId,
+      status,
+      failureReason,
+      recoveredAmount,
+      currency,
+    } = req.body;
+
+    if (!recoveryActionId) {
+      res.status(400).json({
+        error: "recoveryActionId is required",
+      });
+
+      return;
+    }
+
+    if (!status) {
+      res.status(400).json({
+        error: "status is required",
+      });
+
+      return;
+    }
+
+    if (!currency) {
+      res.status(400).json({
+        error: "currency is required",
+      });
+
+      return;
+    }
+
+    const data = await createOutcome({
+      recoveryActionId,
+      status: status as any,
+      failureReason,
+      recoveredAmount:
+        recoveredAmount !== undefined
+          ? new Prisma.Decimal(recoveredAmount)
+          : undefined,
+      currency,
+    });
+
+    res.status(201).json({
+      data,
+    });
+  } catch (error) {
+    console.error(
+      "Failed to create outcome:",
+      error,
+    );
+
+    res.status(400).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to create outcome",
     });
   }
 };
