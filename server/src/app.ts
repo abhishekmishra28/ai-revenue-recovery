@@ -14,6 +14,7 @@ import auditEventRoutes from "./modules/audit-events/audit-event.routes";
 import recoveryEngineRoutes from "./modules/recovery-engine/recovery-engine.routes";
 import eventProcessorRoutes from "./modules/event-processing/event-processor.routes";
 import aiStrategyEngineRoutes from "./modules/ai-strategy-engine/ai-strategy-engine.routes";
+import recoveryActionEngineRoutes from "./modules/recovery-action-engine/recovery-action-engine.routes";
 
 const app = express();
 
@@ -34,5 +35,6 @@ app.use("/audit-events", auditEventRoutes);
 app.use("/recovery-engine", recoveryEngineRoutes);
 app.use("/event-processing", eventProcessorRoutes);
 app.use("/ai-strategy-engine", aiStrategyEngineRoutes);
+app.use("/recovery-action-engine", recoveryActionEngineRoutes);
 
 export default app;
