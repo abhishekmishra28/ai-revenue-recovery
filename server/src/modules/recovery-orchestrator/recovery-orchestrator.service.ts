@@ -5,7 +5,7 @@ import { createRecoveryAction } from "../recovery-action-engine/recovery-action-
 import { executeRecoveryAction } from "../action-execution/action-execution.service";
 import { createRevenueAttribution } from "../revenue-attribution/revenue-attribution.service";
 import { Prisma } from "@prisma/client";
-
+import { prisma } from "../../lib/prisma";
 export const orchestrateRecovery = async (
   revenueEventId: string,
 ) => {
@@ -23,20 +23,90 @@ export const orchestrateRecovery = async (
    * Stop if already processed.
    */
   if (
-    eventResult.status ===
-    "ALREADY_PROCESSED"
-  ) {
-    return {
-      status: "ALREADY_PROCESSED",
-      event: eventResult.event,
-      recoveryCase: null,
-      strategyDecision: null,
-      validatedDecision: null,
-      recoveryAction: null,
-      outcome: null,
-      attribution: null,
-    };
-  }
+  eventResult.status ===
+  "ALREADY_PROCESSED"
+) {
+  const existingRecoveryCase =
+    await prisma.recoveryCase.findFirst({
+      where: {
+        revenueEventId:
+          revenueEventId,
+      },
+
+      include: {
+        strategyDecisions: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
+
+        recoveryActions: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
+
+        outcomes: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
+
+        attributions: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
+      },
+    });
+
+  const strategyDecision =
+    existingRecoveryCase
+      ?.strategyDecisions?.[0] ?? null;
+
+  const recoveryAction =
+    existingRecoveryCase
+      ?.recoveryActions?.[0] ?? null;
+
+  const outcome =
+    existingRecoveryCase
+      ?.outcomes?.[0] ?? null;
+
+  const attribution =
+    existingRecoveryCase
+      ?.attributions?.[0] ?? null;
+
+  return {
+    status: "ALREADY_PROCESSED",
+
+    event:
+      eventResult.event,
+
+    recoveryCase:
+      existingRecoveryCase,
+
+    strategyDecision,
+
+    validatedDecision:
+      strategyDecision?.status ===
+      "VALIDATED"
+        ? strategyDecision
+        : strategyDecision?.status ===
+          "REJECTED"
+        ? strategyDecision
+        : null,
+
+    recoveryAction,
+
+    outcome,
+
+    attribution,
+  };
+}
 
   /*
    * STEP 3

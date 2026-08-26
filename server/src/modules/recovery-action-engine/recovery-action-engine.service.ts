@@ -42,8 +42,12 @@ export const createRecoveryAction = async (
   strategyDecisionId: string,
 ) => {
   /*
-   * 1. Find the AI strategy decision.
+   * ============================================================
+   * STEP 1
+   * Load strategy decision + recovery case.
+   * ============================================================
    */
+
   const decision =
     await prisma.aIStrategyDecision.findUnique({
       where: {
@@ -61,27 +65,38 @@ export const createRecoveryAction = async (
   }
 
   /*
-   * 2. Only validated decisions can
-   *    produce recovery actions.
+   * ============================================================
+   * STEP 2
+   * Only VALIDATED decisions may create actions.
+   *
+   * This is a hard safety boundary.
+   * ============================================================
    */
+
   if (
     decision.status !==
     DecisionStatus.VALIDATED
   ) {
     throw new Error(
-      "AI strategy decision must be validated before creating a recovery action",
+      `AI strategy decision must be VALIDATED before creating a recovery action. Current status: ${decision.status}`,
     );
   }
 
   /*
-   * 3. Idempotency:
-   *    Do not create another action for
-   *    the same strategy decision.
+   * ============================================================
+   * STEP 3
+   * Idempotency.
+   *
+   * One strategy decision must produce at most one
+   * RecoveryAction.
+   * ============================================================
    */
+
   const existingAction =
     await prisma.recoveryAction.findFirst({
       where: {
-        strategyDecisionId: decision.id,
+        strategyDecisionId:
+          decision.id,
       },
       orderBy: {
         createdAt: "desc",
@@ -93,23 +108,34 @@ export const createRecoveryAction = async (
   }
 
   /*
-   * 4. Convert the AI strategy into
-   *    an executable recovery action.
+   * ============================================================
+   * STEP 4
+   * Convert AI strategy into executable action.
+   * ============================================================
    */
+
   const actionType =
     mapStrategyToAction(
       decision.decision,
     );
 
   /*
-   * 5. Deterministic idempotency key.
+   * ============================================================
+   * STEP 5
+   * Deterministic idempotency key.
+   * ============================================================
    */
+
   const idempotencyKey =
     `strategy-decision:${decision.id}`;
 
   /*
-   * 6. Create the RecoveryAction.
+   * ============================================================
+   * STEP 6
+   * Create RecoveryAction.
+   * ============================================================
    */
+
   const action =
     await prisma.recoveryAction.create({
       data: {
@@ -130,11 +156,20 @@ export const createRecoveryAction = async (
           decision.parameters ??
           undefined,
       },
+
+      include: {
+        recoveryCase: true,
+        strategyDecision: true,
+      },
     });
 
   /*
-   * 7. Record audit event.
+   * ============================================================
+   * STEP 7
+   * Audit the action creation.
+   * ============================================================
    */
+
   await createAuditEvent({
     merchantId:
       decision.recoveryCase.merchantId,
@@ -165,6 +200,13 @@ export const createRecoveryAction = async (
         action.idempotencyKey,
     },
   });
+
+  /*
+   * ============================================================
+   * STEP 8
+   * Return created action.
+   * ============================================================
+   */
 
   return action;
 };

@@ -33,6 +33,12 @@ export const validateStrategyDecision = async (
     return decision;
   }
 
+  /*
+   * ----------------------------------------------------------
+   * STEP 1
+   * Find merchant policy for the AI decision.
+   * ----------------------------------------------------------
+   */
   const policy = await prisma.policy.findUnique({
     where: {
       merchantId_actionType: {
@@ -74,7 +80,10 @@ export const validateStrategyDecision = async (
   }
 
   /*
+   * ----------------------------------------------------------
+   * STEP 2
    * Maximum recovery amount check.
+   * ----------------------------------------------------------
    */
   if (
     policy.maxAmount !== null &&
@@ -101,7 +110,8 @@ export const validateStrategyDecision = async (
       metadata: {
         strategyDecisionId: decision.id,
         decision: decision.decision,
-        reason: "Estimated recovery exceeds merchant policy maximum",
+        reason:
+          "Estimated recovery exceeds merchant policy maximum",
         estimatedRecovery:
           decision.recoveryCase.estimatedRecovery.toString(),
         maxAmount: policy.maxAmount.toString(),
@@ -112,7 +122,10 @@ export const validateStrategyDecision = async (
   }
 
   /*
+   * ----------------------------------------------------------
+   * STEP 3
    * Maximum attempts check.
+   * ----------------------------------------------------------
    */
   if (policy.maxAttempts !== null) {
     const attempts = await prisma.recoveryAction.count({
@@ -161,7 +174,106 @@ export const validateStrategyDecision = async (
   }
 
   /*
+   * ----------------------------------------------------------
+   * STEP 4
+   * Cooldown check.
+   *
+   * The merchant policy may require a waiting period between
+   * recovery attempts for the same strategy.
+   *
+   * Example:
+   *
+   * cooldownSeconds = 3600
+   *
+   * Last RETRY_PAYMENT
+   *       ↓
+   * 1 hour cooldown
+   *       ↓
+   * Another RETRY_PAYMENT allowed
+   * ----------------------------------------------------------
+   */
+  if (policy.cooldownSeconds !== null) {
+    const lastAction =
+      await prisma.recoveryAction.findFirst({
+        where: {
+          recoveryCaseId: decision.recoveryCaseId,
+          actionType: decision.decision,
+          status: {
+            in: [
+              RecoveryActionStatus.PENDING,
+              RecoveryActionStatus.VALIDATED,
+              RecoveryActionStatus.EXECUTING,
+              RecoveryActionStatus.SUCCEEDED,
+              RecoveryActionStatus.FAILED,
+            ],
+          },
+        },
+        orderBy: {
+          executedAt: "desc",
+        },
+      });
+
+    if (lastAction?.executedAt) {
+      const now = Date.now();
+
+      const lastActionTime =
+        lastAction.executedAt.getTime();
+
+      const elapsedSeconds =
+        (now - lastActionTime) / 1000;
+
+      const cooldownRemaining =
+        policy.cooldownSeconds - elapsedSeconds;
+
+      if (cooldownRemaining > 0) {
+        const rejectedDecision =
+          await prisma.aIStrategyDecision.update({
+            where: {
+              id: decision.id,
+            },
+            data: {
+              status: DecisionStatus.REJECTED,
+            },
+          });
+
+        await createAuditEvent({
+          merchantId:
+            decision.recoveryCase.merchantId,
+          recoveryCaseId:
+            decision.recoveryCaseId,
+          eventType:
+            "AI_STRATEGY_REJECTED",
+          actorType: ActorType.SYSTEM,
+          metadata: {
+            strategyDecisionId:
+              decision.id,
+            decision:
+              decision.decision,
+            reason:
+              "Recovery action is still within merchant policy cooldown",
+            cooldownSeconds:
+              policy.cooldownSeconds,
+            elapsedSeconds:
+              Math.floor(elapsedSeconds),
+            cooldownRemainingSeconds:
+              Math.ceil(cooldownRemaining),
+            lastActionId:
+              lastAction.id,
+            lastActionAt:
+              lastAction.executedAt.toISOString(),
+          },
+        });
+
+        return rejectedDecision;
+      }
+    }
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * STEP 5
    * All policy checks passed.
+   * ----------------------------------------------------------
    */
   const validatedDecision =
     await prisma.aIStrategyDecision.update({

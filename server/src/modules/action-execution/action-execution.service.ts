@@ -9,7 +9,7 @@ export const executeRecoveryAction = async (
   recoveryActionId: string,
 ) => {
   /*
-   * 1. Fetch the recovery action.
+   * 1. Fetch RecoveryAction.
    */
   const action =
     await prisma.recoveryAction.findUnique({
@@ -17,7 +17,11 @@ export const executeRecoveryAction = async (
         id: recoveryActionId,
       },
       include: {
-        recoveryCase: true,
+        recoveryCase: {
+          include: {
+            revenueEvent: true,
+          },
+        },
       },
     });
 
@@ -30,8 +34,7 @@ export const executeRecoveryAction = async (
   /*
    * 2. Idempotency.
    *
-   * If execution has already completed,
-   * return the existing outcome.
+   * Terminal actions must never execute again.
    */
   if (
     action.status ===
@@ -80,7 +83,11 @@ export const executeRecoveryAction = async (
         executedAt: new Date(),
       },
       include: {
-        recoveryCase: true,
+        recoveryCase: {
+          include: {
+            revenueEvent: true,
+          },
+        },
       },
     });
 
@@ -88,14 +95,44 @@ export const executeRecoveryAction = async (
     /*
      * 5. Execute recovery action.
      *
-     * Currently this is a deterministic mock
-     * provider. Real payment-provider integration
-     * will be added later.
+     * This is currently a deterministic mock
+     * payment provider.
+     *
+     * The test scenario is carried by the
+     * RevenueEvent payload.
      */
-    const executionResult = {
-      success: true,
-      message: `Mock execution completed for ${action.actionType}`,
-    };
+    const revenueEvent =
+      executingAction.recoveryCase
+        .revenueEvent;
+
+    const payload =
+      revenueEvent?.payload;
+
+    const scenario =
+      payload &&
+      typeof payload === "object" &&
+      !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+            .scenario
+        : undefined;
+
+    /*
+     * Explicit failure scenario.
+     */
+    const shouldFail =
+      scenario ===
+      "EXECUTION_FAILURE";
+
+    const executionResult = shouldFail
+      ? {
+          success: false,
+          message:
+            "Mock payment provider rejected the retry",
+        }
+      : {
+          success: true,
+          message: `Mock execution completed for ${action.actionType}`,
+        };
 
     /*
      * 6. Update RecoveryAction.
@@ -124,12 +161,18 @@ export const executeRecoveryAction = async (
               : executionResult.message,
         },
         include: {
-          recoveryCase: true,
+          recoveryCase: {
+            include: {
+              revenueEvent: true,
+            },
+          },
         },
       });
 
     /*
-     * 7. Find existing outcome.
+     * 7. Find existing Outcome.
+     *
+     * Protects against duplicate execution.
      */
     let outcome =
       await prisma.outcome.findUnique({
@@ -177,8 +220,13 @@ export const executeRecoveryAction = async (
     }
 
     /*
-     * 9. Successful recovery updates
-     *    the RecoveryCase lifecycle.
+     * 9. RecoveryCase lifecycle.
+     *
+     * SUCCESS:
+     *   RECOVERED
+     *
+     * FAILURE:
+     *   remains OPEN
      */
     let finalAction =
       completedAction;
@@ -198,15 +246,40 @@ export const executeRecoveryAction = async (
 
             closedAt: new Date(),
           },
+          include: {
+            revenueEvent: true,
+          },
         });
 
-      /*
-       * Keep the returned action's
-       * recoveryCase synchronized.
-       */
       finalAction = {
         ...completedAction,
         recoveryCase: updatedCase,
+      };
+    } else {
+      /*
+       * Failed recovery should remain OPEN.
+       *
+       * Do not close the case.
+       */
+      const openCase =
+        await prisma.recoveryCase.update({
+          where: {
+            id: action.recoveryCaseId,
+          },
+          data: {
+            status:
+              RecoveryCaseStatus.OPEN,
+
+            closedAt: null,
+          },
+          include: {
+            revenueEvent: true,
+          },
+        });
+
+      finalAction = {
+        ...completedAction,
+        recoveryCase: openCase,
       };
     }
 
@@ -219,8 +292,7 @@ export const executeRecoveryAction = async (
     };
   } catch (error) {
     /*
-     * 11. Mark action as failed if execution
-     *     throws unexpectedly.
+     * 11. Unexpected execution error.
      */
     await prisma.recoveryAction.update({
       where: {
@@ -239,6 +311,21 @@ export const executeRecoveryAction = async (
           error instanceof Error
             ? error.message
             : "Unknown execution error",
+      },
+    });
+
+    /*
+     * Ensure the case remains recoverable/open.
+     */
+    await prisma.recoveryCase.update({
+      where: {
+        id: action.recoveryCaseId,
+      },
+      data: {
+        status:
+          RecoveryCaseStatus.OPEN,
+
+        closedAt: null,
       },
     });
 
