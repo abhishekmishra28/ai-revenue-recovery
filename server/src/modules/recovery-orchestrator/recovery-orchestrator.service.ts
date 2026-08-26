@@ -3,6 +3,8 @@ import { generateStrategyDecision } from "../ai-strategy-engine/ai-strategy-engi
 import { validateStrategyDecision } from "../policy-engine/policy-engine.service";
 import { createRecoveryAction } from "../recovery-action-engine/recovery-action-engine.service";
 import { executeRecoveryAction } from "../action-execution/action-execution.service";
+import { createRevenueAttribution } from "../revenue-attribution/revenue-attribution.service";
+import { Prisma } from "@prisma/client";
 
 export const orchestrateRecovery = async (
   revenueEventId: string,
@@ -18,7 +20,7 @@ export const orchestrateRecovery = async (
 
   /*
    * STEP 2
-   * Stop if the event was already processed.
+   * Stop if already processed.
    */
   if (
     eventResult.status ===
@@ -32,12 +34,13 @@ export const orchestrateRecovery = async (
       validatedDecision: null,
       recoveryAction: null,
       outcome: null,
+      attribution: null,
     };
   }
 
   /*
    * STEP 3
-   * Stop if no recovery case is required.
+   * Stop if no recovery is required.
    */
   if (!eventResult.recoveryCase) {
     return {
@@ -48,6 +51,7 @@ export const orchestrateRecovery = async (
       validatedDecision: null,
       recoveryAction: null,
       outcome: null,
+      attribution: null,
     };
   }
 
@@ -65,7 +69,7 @@ export const orchestrateRecovery = async (
 
   /*
    * STEP 5
-   * Validate strategy against merchant policy.
+   * Validate strategy decision.
    */
   const validatedDecision =
     await validateStrategyDecision(
@@ -88,12 +92,13 @@ export const orchestrateRecovery = async (
       validatedDecision,
       recoveryAction: null,
       outcome: null,
+      attribution: null,
     };
   }
 
   /*
    * STEP 7
-   * Create executable recovery action.
+   * Create RecoveryAction.
    */
   const recoveryAction =
     await createRecoveryAction(
@@ -102,13 +107,7 @@ export const orchestrateRecovery = async (
 
   /*
    * STEP 8
-   * Execute recovery action.
-   *
-   * Action Execution returns:
-   * {
-   *   action,
-   *   outcome
-   * }
+   * Execute RecoveryAction.
    */
   const executionResult =
     await executeRecoveryAction(
@@ -117,7 +116,39 @@ export const orchestrateRecovery = async (
 
   /*
    * STEP 9
-   * Return complete pipeline result.
+   * Revenue Attribution.
+   *
+   * Only successful outcomes are eligible.
+   */
+  let attribution = null;
+
+  if (
+    executionResult.outcome &&
+    executionResult.outcome.status ===
+      "SUCCESS" &&
+    executionResult.outcome.recoveredAmount
+  ) {
+    attribution =
+      await createRevenueAttribution({
+        outcomeId:
+          executionResult.outcome.id,
+
+        amount:
+          new Prisma.Decimal(
+            executionResult.outcome.recoveredAmount,
+          ),
+
+        currency:
+          executionResult.outcome.currency,
+
+        attributionType:
+          "DIRECT",
+      });
+  }
+
+  /*
+   * STEP 10
+   * Return the complete recovery pipeline.
    */
   return {
     status:
@@ -139,5 +170,7 @@ export const orchestrateRecovery = async (
 
     outcome:
       executionResult.outcome,
+
+    attribution,
   };
 };
