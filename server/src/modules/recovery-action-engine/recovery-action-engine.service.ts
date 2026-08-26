@@ -42,7 +42,7 @@ export const createRecoveryAction = async (
   strategyDecisionId: string,
 ) => {
   /*
-   * 1. Find the AI strategy decision
+   * 1. Find the AI strategy decision.
    */
   const decision =
     await prisma.aIStrategyDecision.findUnique({
@@ -55,23 +55,28 @@ export const createRecoveryAction = async (
     });
 
   if (!decision) {
-    throw new Error("AI strategy decision not found");
+    throw new Error(
+      "AI strategy decision not found",
+    );
   }
 
   /*
-   * 2. Only validated decisions
-   *    can produce recovery actions.
+   * 2. Only validated decisions can
+   *    produce recovery actions.
    */
-  if (decision.status !== DecisionStatus.VALIDATED) {
+  if (
+    decision.status !==
+    DecisionStatus.VALIDATED
+  ) {
     throw new Error(
       "AI strategy decision must be validated before creating a recovery action",
     );
   }
 
   /*
-   * 3. Check whether an action already exists.
-   *
-   * This makes the operation idempotent.
+   * 3. Idempotency:
+   *    Do not create another action for
+   *    the same strategy decision.
    */
   const existingAction =
     await prisma.recoveryAction.findFirst({
@@ -88,213 +93,78 @@ export const createRecoveryAction = async (
   }
 
   /*
-   * 4. Convert AI strategy into executable action.
+   * 4. Convert the AI strategy into
+   *    an executable recovery action.
    */
-  const actionType = mapStrategyToAction(
-    decision.decision,
-  );
+  const actionType =
+    mapStrategyToAction(
+      decision.decision,
+    );
 
   /*
-   * 5. Generate deterministic idempotency key.
+   * 5. Deterministic idempotency key.
    */
   const idempotencyKey =
     `strategy-decision:${decision.id}`;
 
   /*
-   * 6. Create RecoveryAction.
+   * 6. Create the RecoveryAction.
    */
-  const action = await prisma.recoveryAction.create({
-    data: {
-      recoveryCaseId: decision.recoveryCaseId,
+  const action =
+    await prisma.recoveryAction.create({
+      data: {
+        recoveryCaseId:
+          decision.recoveryCaseId,
 
-      strategyDecisionId: decision.id,
+        strategyDecisionId:
+          decision.id,
 
-      actionType,
+        actionType,
 
-      status: RecoveryActionStatus.PENDING,
+        status:
+          RecoveryActionStatus.PENDING,
 
-      idempotencyKey,
+        idempotencyKey,
 
-      parameters:
-        decision.parameters ?? undefined,
-    },
-  });
+        parameters:
+          decision.parameters ??
+          undefined,
+      },
+    });
 
   /*
    * 7. Record audit event.
    */
   await createAuditEvent({
-    merchantId: decision.recoveryCase.merchantId,
+    merchantId:
+      decision.recoveryCase.merchantId,
 
-    recoveryCaseId: decision.recoveryCaseId,
+    recoveryCaseId:
+      decision.recoveryCaseId,
 
-    eventType: "RECOVERY_ACTION_CREATED",
+    eventType:
+      "RECOVERY_ACTION_CREATED",
 
-    actorType: ActorType.SYSTEM,
+    actorType:
+      ActorType.SYSTEM,
 
     metadata: {
-      recoveryActionId: action.id,
-      strategyDecisionId: decision.id,
-      actionType: action.actionType,
-      status: action.status,
-      idempotencyKey: action.idempotencyKey,
+      recoveryActionId:
+        action.id,
+
+      strategyDecisionId:
+        decision.id,
+
+      actionType:
+        action.actionType,
+
+      status:
+        action.status,
+
+      idempotencyKey:
+        action.idempotencyKey,
     },
   });
 
   return action;
-};
-export const executeRecoveryAction = async (
-  recoveryActionId: string,
-) => {
-  const action = await prisma.recoveryAction.findUnique({
-    where: {
-      id: recoveryActionId,
-    },
-    include: {
-      recoveryCase: true,
-    },
-  });
-
-  if (!action) {
-    throw new Error("Recovery action not found");
-  }
-
-  /*
-   * Idempotency:
-   * Already completed actions should not execute again.
-   */
-  if (
-    action.status === RecoveryActionStatus.SUCCEEDED ||
-    action.status === RecoveryActionStatus.FAILED
-  ) {
-    return action;
-  }
-
-  /*
-   * Only pending actions can start execution.
-   */
-  if (action.status !== RecoveryActionStatus.PENDING) {
-    throw new Error(
-      "Recovery action must be pending before execution",
-    );
-  }
-
-  /*
-   * Mark action as executing.
-   */
-  const executingAction =
-    await prisma.recoveryAction.update({
-      where: {
-        id: action.id,
-      },
-      data: {
-        status: RecoveryActionStatus.EXECUTING,
-      },
-    });
-
-  /*
-   * Audit execution start.
-   */
-  await createAuditEvent({
-    merchantId: action.recoveryCase.merchantId,
-    recoveryCaseId: action.recoveryCaseId,
-    eventType: "RECOVERY_ACTION_EXECUTING",
-    actorType: ActorType.SYSTEM,
-    metadata: {
-      recoveryActionId: action.id,
-      actionType: action.actionType,
-      status: executingAction.status,
-    },
-  });
-
-  try {
-    /*
-     * Temporary execution simulation.
-     *
-     * Actual payment/email/provider integrations
-     * will be connected later.
-     */
-    const executionResult = {
-      success: true,
-      message: "Recovery action executed successfully",
-    };
-
-    if (!executionResult.success) {
-      throw new Error(executionResult.message);
-    }
-
-    /*
-     * Mark action as successful.
-     */
-    const successfulAction =
-      await prisma.recoveryAction.update({
-        where: {
-          id: action.id,
-        },
-        data: {
-          status: RecoveryActionStatus.SUCCEEDED,
-          executedAt: new Date(),
-          result: executionResult,
-        },
-      });
-
-    /*
-     * Audit successful execution.
-     */
-    await createAuditEvent({
-      merchantId: action.recoveryCase.merchantId,
-      recoveryCaseId: action.recoveryCaseId,
-      eventType: "RECOVERY_ACTION_SUCCEEDED",
-      actorType: ActorType.SYSTEM,
-      metadata: {
-        recoveryActionId: action.id,
-        actionType: action.actionType,
-        status: successfulAction.status,
-        result: executionResult,
-      },
-    });
-
-    return successfulAction;
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : "Unknown execution error";
-
-    /*
-     * Mark action as failed.
-     */
-    const failedAction =
-      await prisma.recoveryAction.update({
-        where: {
-          id: action.id,
-        },
-        data: {
-          status: RecoveryActionStatus.FAILED,
-          executedAt: new Date(),
-          result: {
-            success: false,
-            error: errorMessage,
-          },
-        },
-      });
-
-    /*
-     * Audit failed execution.
-     */
-    await createAuditEvent({
-      merchantId: action.recoveryCase.merchantId,
-      recoveryCaseId: action.recoveryCaseId,
-      eventType: "RECOVERY_ACTION_FAILED",
-      actorType: ActorType.SYSTEM,
-      metadata: {
-        recoveryActionId: action.id,
-        actionType: action.actionType,
-        status: failedAction.status,
-        error: errorMessage,
-      },
-    });
-
-    return failedAction;
-  }
 };

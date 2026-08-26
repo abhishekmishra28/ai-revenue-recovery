@@ -2,64 +2,42 @@ import { Request, Response } from "express";
 
 import {
   createRecoveryAction,
-  executeRecoveryAction,
 } from "./recovery-action-engine.service";
 
-type ActionParams = {
-  recoveryActionId: string;
-};
-
-type StrategyDecisionParams = {
+type CreateRecoveryActionParams = {
   strategyDecisionId: string;
 };
 
-export const createRecoveryActionController = async (
-  req: Request<StrategyDecisionParams>,
-  res: Response,
-) => {
-  try {
-    const { strategyDecisionId } = req.params;
-
-    const data = await createRecoveryAction(
-      strategyDecisionId,
-    );
-
-    res.status(201).json({
-      data,
-    });
-  } catch (error) {
-    console.error(
-      "Failed to create recovery action:",
-      error,
-    );
-
-    res.status(400).json({
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to create recovery action",
-    });
-  }
-};
-
-export const executeRecoveryActionController =
+export const createRecoveryActionController =
   async (
-    req: Request<ActionParams>,
+    req: Request<CreateRecoveryActionParams>,
     res: Response,
   ) => {
     try {
-      const { recoveryActionId } = req.params;
+      const {
+        strategyDecisionId,
+      } = req.params;
 
-      const data = await executeRecoveryAction(
-        recoveryActionId,
-      );
+      if (!strategyDecisionId) {
+        res.status(400).json({
+          error:
+            "strategyDecisionId is required",
+        });
 
-      res.status(200).json({
+        return;
+      }
+
+      const data =
+        await createRecoveryAction(
+          strategyDecisionId,
+        );
+
+      res.status(201).json({
         data,
       });
     } catch (error) {
       console.error(
-        "Failed to execute recovery action:",
+        "Failed to create recovery action:",
         error,
       );
 
@@ -67,7 +45,7 @@ export const executeRecoveryActionController =
         error:
           error instanceof Error
             ? error.message
-            : "Failed to execute recovery action",
+            : "Failed to create recovery action",
       });
     }
   };
