@@ -22,18 +22,31 @@ export const processRevenueEvent = async (
     throw new Error("Revenue event not found");
   }
 
-  // Idempotency:
-  // already processed events should not create duplicate work.
+  /*
+   * Idempotency:
+   * If the event has already completed processing,
+   * do not create duplicate recovery work.
+   */
   if (event.processedAt) {
     return {
       event,
       recoveryCase: null,
-      status: "ALREADY_PROCESSED",
+      status: "ALREADY_PROCESSED" as const,
     };
   }
 
+  /*
+   * Detect whether this event requires recovery.
+   */
   const recoveryCase = await detectRecoveryCase(event);
 
+  /*
+   * Mark the event as processed only after
+   * recovery-case detection succeeds.
+   *
+   * The downstream orchestrator is now responsible
+   * for completing the recovery pipeline.
+   */
   await prisma.revenueEvent.update({
     where: {
       id: event.id,
@@ -44,10 +57,13 @@ export const processRevenueEvent = async (
   });
 
   return {
-    event,
+    event: {
+      ...event,
+      processedAt: new Date(),
+    },
     recoveryCase,
     status: recoveryCase
-      ? "RECOVERY_CASE_CREATED"
-      : "NO_RECOVERY_REQUIRED",
+      ? ("RECOVERY_CASE_CREATED" as const)
+      : ("NO_RECOVERY_REQUIRED" as const),
   };
 };
