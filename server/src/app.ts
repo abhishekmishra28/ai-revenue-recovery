@@ -20,6 +20,8 @@ import revenueAttributionRoutes from "./modules/revenue-attribution/revenue-attr
 import policyEngineRoutes from "./modules/policy-engine/policy-engine.routes";
 import auditRoutes from "./modules/audit/audit.routes";
 import recoveryOrchestratorRoutes from "./modules/recovery-orchestrator/recovery-orchestrator.routes";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger";
 
 const app = express();
 
@@ -48,6 +50,26 @@ app.use("/audit", auditRoutes);
 app.use(
   "/recovery-orchestrator",
   recoveryOrchestratorRoutes,
+);
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    explorer: true,
+
+    customSiteTitle:
+      "AI Revenue Recovery API",
+
+    customCss: `
+      .swagger-ui .topbar {
+        background-color: #111827;
+      }
+
+      .swagger-ui .info .title {
+        font-size: 32px;
+      }
+    `,
+  }),
 );
 
 export default app;
