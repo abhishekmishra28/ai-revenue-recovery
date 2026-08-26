@@ -19,6 +19,7 @@ import actionExecutionRoutes from "./modules/action-execution/action-execution.r
 import revenueAttributionRoutes from "./modules/revenue-attribution/revenue-attribution.routes";
 import policyEngineRoutes from "./modules/policy-engine/policy-engine.routes";
 import auditRoutes from "./modules/audit/audit.routes";
+import recoveryOrchestratorRoutes from "./modules/recovery-orchestrator/recovery-orchestrator.routes";
 
 const app = express();
 
@@ -44,5 +45,9 @@ app.use("/action-execution", actionExecutionRoutes);
 app.use("/revenue-attribution", revenueAttributionRoutes);
 app.use("/policy-engine", policyEngineRoutes);
 app.use("/audit", auditRoutes);
+app.use(
+  "/recovery-orchestrator",
+  recoveryOrchestratorRoutes,
+);
 
 export default app;

@@ -8,37 +8,57 @@ export const executeRecoveryAction = async (
   recoveryActionId: string,
 ) => {
   /*
-   * 1. Fetch the action
+   * 1. Fetch the action.
    */
-  const action = await prisma.recoveryAction.findUnique({
-        where: {
-            id: recoveryActionId,
-        },
-        include: {
-            recoveryCase: true,
-        },
+  const action =
+    await prisma.recoveryAction.findUnique({
+      where: {
+        id: recoveryActionId,
+      },
+      include: {
+        recoveryCase: true,
+      },
     });
 
   if (!action) {
-    throw new Error("Recovery action not found");
+    throw new Error(
+      "Recovery action not found",
+    );
   }
 
   /*
-   * 2. Idempotency:
-   *    If the action has already completed, return it.
+   * 2. Idempotency.
+   *
+   * Completed actions should not execute again.
    */
   if (
-    action.status === RecoveryActionStatus.SUCCEEDED ||
-    action.status === RecoveryActionStatus.FAILED ||
-    action.status === RecoveryActionStatus.SKIPPED
+    action.status ===
+      RecoveryActionStatus.SUCCEEDED ||
+    action.status ===
+      RecoveryActionStatus.FAILED ||
+    action.status ===
+      RecoveryActionStatus.SKIPPED
   ) {
-    return action;
+    const outcome =
+      await prisma.outcome.findUnique({
+        where: {
+          recoveryActionId: action.id,
+        },
+      });
+
+    return {
+      action,
+      outcome,
+    };
   }
 
   /*
-   * 3. Only PENDING actions can start execution.
+   * 3. Only PENDING actions can execute.
    */
-  if (action.status !== RecoveryActionStatus.PENDING) {
+  if (
+    action.status !==
+    RecoveryActionStatus.PENDING
+  ) {
     throw new Error(
       `Recovery action cannot be executed from status: ${action.status}`,
     );
@@ -53,8 +73,12 @@ export const executeRecoveryAction = async (
         id: action.id,
       },
       data: {
-        status: RecoveryActionStatus.EXECUTING,
+        status:
+          RecoveryActionStatus.EXECUTING,
         executedAt: new Date(),
+      },
+      include: {
+        recoveryCase: true,
       },
     });
 
@@ -62,8 +86,8 @@ export const executeRecoveryAction = async (
     /*
      * 5. Mock provider execution.
      *
-     * For the MVP we simulate successful execution.
-     * No real payment is attempted.
+     * This is intentionally deterministic
+     * for the MVP.
      */
     const executionResult = {
       success: true,
@@ -71,7 +95,7 @@ export const executeRecoveryAction = async (
     };
 
     /*
-     * 6. Mark action as SUCCEEDED.
+     * 6. Update RecoveryAction.
      */
     const completedAction =
       await prisma.recoveryAction.update({
@@ -79,68 +103,107 @@ export const executeRecoveryAction = async (
           id: executingAction.id,
         },
         data: {
-          status: executionResult.success
-            ? RecoveryActionStatus.SUCCEEDED
-            : RecoveryActionStatus.FAILED,
+          status:
+            executionResult.success
+              ? RecoveryActionStatus.SUCCEEDED
+              : RecoveryActionStatus.FAILED,
+
           completedAt: new Date(),
-          errorCode: executionResult.success
-            ? null
-            : "EXECUTION_FAILED",
-          errorMessage: executionResult.success
-            ? null
-            : executionResult.message,
+
+          errorCode:
+            executionResult.success
+              ? null
+              : "EXECUTION_FAILED",
+
+          errorMessage:
+            executionResult.success
+              ? null
+              : executionResult.message,
+        },
+        include: {
+          recoveryCase: true,
         },
       });
 
     /*
-     * 7. Create Outcome.
+     * 7. Find an existing Outcome.
      *
-     * One RecoveryAction can have only one Outcome
-     * because recoveryActionId is unique in the schema.
+     * recoveryActionId is unique in the schema.
      */
-    const existingOutcome = await prisma.outcome.findUnique({
-      where: {
-        recoveryActionId: action.id,
-      },
-    });
-
-    if (!existingOutcome) {
-      await prisma.outcome.create({
-        data: {
-          recoveryCaseId: action.recoveryCaseId,
-          recoveryActionId: action.id,
-          status: executionResult.success
-            ? OutcomeStatus.SUCCESS
-            : OutcomeStatus.FAILED,
-          failureReason: executionResult.success
-            ? null
-            : executionResult.message,
-          recoveredAmount: action.recoveryCase.estimatedRecovery,
-          currency: action.recoveryCase.currency,
-          occurredAt: new Date(),
+    let outcome =
+      await prisma.outcome.findUnique({
+        where: {
+          recoveryActionId:
+            action.id,
         },
       });
+
+    /*
+     * 8. Create Outcome if it does not exist.
+     */
+    if (!outcome) {
+      outcome =
+        await prisma.outcome.create({
+          data: {
+            recoveryCaseId:
+              action.recoveryCaseId,
+
+            recoveryActionId:
+              action.id,
+
+            status:
+              executionResult.success
+                ? OutcomeStatus.SUCCESS
+                : OutcomeStatus.FAILED,
+
+            failureReason:
+              executionResult.success
+                ? null
+                : executionResult.message,
+
+            recoveredAmount:
+              action.recoveryCase
+                .estimatedRecovery,
+
+            currency:
+              action.recoveryCase.currency,
+
+            occurredAt: new Date(),
+          },
+        });
     }
 
-    return completedAction;
+    return {
+      action: completedAction,
+      outcome,
+    };
   } catch (error) {
     /*
-     * 8. Mark action as FAILED if execution itself throws.
+     * 9. Execution failure.
      */
-    await prisma.recoveryAction.update({
-      where: {
-        id: action.id,
-      },
-      data: {
-        status: RecoveryActionStatus.FAILED,
-        completedAt: new Date(),
-        errorCode: "EXECUTION_ERROR",
-        errorMessage:
-          error instanceof Error
-            ? error.message
-            : "Unknown execution error",
-      },
-    });
+    const failedAction =
+      await prisma.recoveryAction.update({
+        where: {
+          id: action.id,
+        },
+        data: {
+          status:
+            RecoveryActionStatus.FAILED,
+
+          completedAt: new Date(),
+
+          errorCode:
+            "EXECUTION_ERROR",
+
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown execution error",
+        },
+        include: {
+          recoveryCase: true,
+        },
+      });
 
     throw error;
   }
