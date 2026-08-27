@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import RecoveryOverview from "@/components/dashboard/RecoveryOverview";
-import DashboardStats from "@/components/dashboard/DashboardStats";
+import AppShell from "@/components/layout/AppShell";
+import MetricCards from "@/components/dashboard/MetricCards";
+import RevenueRecoveryCard from "@/components/dashboard/RevenueRecoveryCard";
+import RecoveryByWorkflow from "@/components/dashboard/RecoveryByWorkflow";
 import RecoveryCasesTable from "@/components/dashboard/RecoveryCasesTable";
-import RecentActivity from "@/components/dashboard/RecentActivity";
-import RevenueRecoveryChart from "@/components/dashboard/RevenueRecoveryChart";
-import AIInsights from "@/components/dashboard/AIInsights";
+import RecentAuditEvents from "@/components/dashboard/RecentAuditEvents";
+import CaseDetailPanel from "@/components/dashboard/CaseDetailPanel";
+import HowItWorksSection from "@/components/dashboard/HowItWorksSection";
 
 import { api } from "@/lib/api";
 
@@ -18,27 +20,28 @@ import type {
   RevenueAttribution,
 } from "@/types/recovery";
 
+// ──────────────────────────────────────────────────────────
+// Dashboard page
+//
+// Loads all data up front, computes aggregate metrics, and
+// passes them down into the purpose-built display components.
+// Nothing clever happens here — this is purely orchestration.
+// ──────────────────────────────────────────────────────────
+
 const DEFAULT_CURRENCY = "INR";
 
 export default function DashboardPage() {
-  const [recoveryCases, setRecoveryCases] = useState<
-    RecoveryCase[]
-  >([]);
-
-  const [outcomes, setOutcomes] = useState<
-    RecoveryOutcome[]
-  >([]);
-
-  const [attributions, setAttributions] = useState<
-    RevenueAttribution[]
-  >([]);
-
-  const [auditEvents, setAuditEvents] = useState<
-    AuditEvent[]
-  >([]);
-
+  const [recoveryCases, setRecoveryCases] = useState<RecoveryCase[]>([]);
+  const [outcomes, setOutcomes] = useState<RecoveryOutcome[]>([]);
+  const [attributions, setAttributions] = useState<RevenueAttribution[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Which recovery case has been selected (for the side panel)
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+
+  // ── Data loading ───────────────────────────────────────
 
   useEffect(() => {
     let cancelled = false;
@@ -48,56 +51,28 @@ export default function DashboardPage() {
         setLoading(true);
         setError(null);
 
-        const [
-          recoveryCasesResponse,
-          outcomesResponse,
-          attributionResponse,
-          auditResponse,
-        ] = await Promise.all([
+        // Fetch all data in parallel — the backend can handle it
+        const [casesRes, outcomesRes, attrRes, auditRes] = await Promise.all([
           api.recoveryCases.list(),
           api.outcomes.list(),
           api.revenueAttribution.list(),
           api.audit.all(),
         ]);
 
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
-        setRecoveryCases(
-          recoveryCasesResponse.data ?? [],
-        );
-
-        setOutcomes(
-          outcomesResponse.data ?? [],
-        );
-
-        setAttributions(
-          attributionResponse.data ?? [],
-        );
-
-        setAuditEvents(
-          auditResponse.data ?? [],
-        );
+        setRecoveryCases(casesRes.data ?? []);
+        setOutcomes(outcomesRes.data ?? []);
+        setAttributions(attrRes.data ?? []);
+        setAuditEvents(auditRes.data ?? []);
       } catch (err) {
-        if (cancelled) {
-          return;
-        }
-
-        console.error(
-          "Failed to load dashboard:",
-          err,
-        );
-
+        if (cancelled) return;
+        console.error("Dashboard load failed:", err);
         setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load dashboard data",
+          err instanceof Error ? err.message : "Failed to load dashboard data"
         );
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -108,194 +83,151 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const stats = useMemo(() => {
-    let totalOpportunity = 0;
-    let openOpportunity = 0;
-    
-    const totalCases = recoveryCases.length;
-    let openCasesCount = 0;
-    let recoveredCasesCount = 0;
-    let failedCasesCount = 0;
+  // ── Aggregate metrics ──────────────────────────────────
+  //
+  // These numbers are derived from real API data, not hardcoded.
 
-    for (const recoveryCase of recoveryCases) {
-      const amount = Number(
-        recoveryCase.estimatedRecovery ?? 0,
-      );
+  const metrics = useMemo(() => {
+    let revenueAtRisk = 0;
+    let openCases = 0;
 
-      totalOpportunity += amount;
-
-      if (
-        recoveryCase.status === "OPEN" ||
-        recoveryCase.status === "IN_PROGRESS"
-      ) {
-        openOpportunity += amount;
-        openCasesCount++;
-      } else if (recoveryCase.status === "RECOVERED") {
-        recoveredCasesCount++;
-      } else if (recoveryCase.status === "FAILED") {
-        failedCasesCount++;
+    for (const c of recoveryCases) {
+      const amount = Number(c.estimatedRecovery ?? 0);
+      revenueAtRisk += amount;
+      if (c.status === "OPEN" || c.status === "IN_PROGRESS") {
+        openCases++;
       }
     }
 
-    let recoveredAmount = 0;
-    let failedAmount = 0;
+    let revenueRecovered = 0;
+    const successfulOutcomes = outcomes.filter(
+      (o) => o.status === "SUCCESS"
+    );
 
-    for (const outcome of outcomes) {
-      const amount = Number(
-        outcome.recoveredAmount ?? 0,
-      );
-
-      if (outcome.status === "SUCCESS") {
-        recoveredAmount += amount;
-      } else if (outcome.status === "FAILED") {
-        failedAmount += amount;
-      }
+    for (const o of successfulOutcomes) {
+      revenueRecovered += Number(o.recoveredAmount ?? 0);
     }
 
     const recoveryRate =
-      totalOpportunity > 0
-        ? (recoveredAmount / totalOpportunity) * 100
-        : 0;
+      revenueAtRisk > 0 ? (revenueRecovered / revenueAtRisk) * 100 : 0;
 
     return {
-      totalOpportunity,
-      recoveredAmount,
-      failedAmount,
-      openOpportunity,
+      revenueAtRisk,
+      revenueRecovered,
       recoveryRate,
-      totalCases,
-      openCases: openCasesCount,
-      recoveredCases: recoveredCasesCount,
-      failedCases: failedCasesCount,
+      activeCases: openCases,
+      // Each outcome represents an action execution
+      actionsExecuted: outcomes.length,
     };
   }, [recoveryCases, outcomes]);
 
+  // Prefer the currency from the first real data point
   const currency =
     recoveryCases[0]?.currency ??
     outcomes[0]?.currency ??
     DEFAULT_CURRENCY;
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-7xl">
-          <DashboardSkeleton />
-        </div>
-      </main>
-    );
-  }
+  // ── Error state ────────────────────────────────────────
 
   if (error) {
     return (
-      <main className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-7xl">
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-            <h1 className="text-lg font-semibold text-red-900">
-              Failed to load dashboard
-            </h1>
-
-            <p className="mt-2 text-sm text-red-700">
-              {error}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
-            >
-              Retry
-            </button>
-          </div>
+      <AppShell pageTitle="Overview" pageSubtitle="Here's what's happening with your revenue recovery today.">
+        <div
+          className="rounded-xl p-6 max-w-lg"
+          style={{
+            background: "var(--danger-dim)",
+            border: "1px solid rgba(239,68,68,0.25)",
+          }}
+        >
+          <h2 className="text-base font-bold" style={{ color: "#ef4444" }}>
+            Failed to connect to backend
+          </h2>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+            {error}
+          </p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            Make sure the server is running on port 4000.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary mt-4"
+            style={{ fontSize: "13px" }}
+          >
+            Retry
+          </button>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
+  // ── Dashboard ──────────────────────────────────────────
+
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl space-y-6 p-6">
-        {/* Dashboard Header */}
-        <header>
-          <p className="text-sm font-medium text-emerald-600">
-            AI Revenue Recovery
-          </p>
+    <AppShell
+      pageTitle="Overview"
+      pageSubtitle="Here's what's happening with your revenue recovery today."
+    >
+      {/* The main content scrolls — panel sits on top of it */}
+      <div className="space-y-6">
 
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-            Recovery Dashboard
-          </h1>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Monitor recovery opportunities, AI decisions,
-            actions, and recovered revenue.
-          </p>
-        </header>
-
-        {/* KPI / Overview */}
-        <RecoveryOverview
-          totalCases={stats.totalCases}
-          openCases={stats.openCases}
-          recoveredCases={stats.recoveredCases}
-          failedCases={stats.failedCases}
-          recoveredRevenue={stats.recoveredAmount}
+        {/* ── 1. KPI Cards ─────────────────────────────── */}
+        <MetricCards
+          revenueAtRisk={metrics.revenueAtRisk}
+          revenueRecovered={metrics.revenueRecovered}
+          recoveryRate={metrics.recoveryRate}
+          activeCases={metrics.activeCases}
+          actionsExecuted={metrics.actionsExecuted}
           currency={currency}
           loading={loading}
         />
 
-        {/* Metrics */}
-        <DashboardStats cases={recoveryCases} />
+        {/* ── 2. Charts row ─────────────────────────────── */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+          {/* Revenue over time chart — takes 3/5 columns */}
+          <div className="lg:col-span-3">
+            <RevenueRecoveryCard
+              recoveryCases={recoveryCases}
+              outcomes={outcomes}
+              currency={currency}
+              loading={loading}
+            />
+          </div>
 
-        {/* Revenue + AI */}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <RevenueRecoveryChart
-            recoveryCases={recoveryCases}
-            outcomes={outcomes}
-            attributions={attributions}
-          />
-
-          <AIInsights
-            recoveryCases={recoveryCases}
-            auditEvents={auditEvents}
-          />
+          {/* Recovery by workflow donut — takes 2/5 columns */}
+          <div className="lg:col-span-2">
+            <RecoveryByWorkflow
+              recoveryCases={recoveryCases}
+              currency={currency}
+              loading={loading}
+            />
+          </div>
         </div>
 
-        {/* Recovery Cases */}
+        {/* ── 3. At-Risk Cases Table ────────────────────── */}
         <RecoveryCasesTable
           recoveryCases={recoveryCases}
+          onSelectCase={setSelectedCaseId}
+          selectedCaseId={selectedCaseId}
+          loading={loading}
         />
 
-        {/* Activity */}
-        <RecentActivity
-          auditEvents={auditEvents}
+        {/* ── 4. Recent Audit Activity ──────────────────── */}
+        <RecentAuditEvents
+          events={auditEvents}
+          limit={6}
         />
-      </div>
-    </main>
-  );
-}
 
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div className="space-y-2">
-        <div className="h-4 w-40 rounded bg-slate-200" />
-        <div className="h-8 w-64 rounded bg-slate-200" />
-        <div className="h-4 w-96 max-w-full rounded bg-slate-200" />
+        {/* ── 5. How It Works ───────────────────────────── */}
+        <HowItWorksSection />
       </div>
 
-      <div className="h-80 rounded-xl bg-white border border-slate-200" />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="h-28 rounded-xl bg-white border border-slate-200" />
-        <div className="h-28 rounded-xl bg-white border border-slate-200" />
-        <div className="h-28 rounded-xl bg-white border border-slate-200" />
-        <div className="h-28 rounded-xl bg-white border border-slate-200" />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <div className="h-80 rounded-xl bg-white border border-slate-200" />
-        <div className="h-80 rounded-xl bg-white border border-slate-200" />
-      </div>
-
-      <div className="h-96 rounded-xl bg-white border border-slate-200" />
-    </div>
+      {/* ── Case Detail Panel (overlaid, not in flow) ───── */}
+      {selectedCaseId && (
+        <CaseDetailPanel
+          caseId={selectedCaseId}
+          onClose={() => setSelectedCaseId(null)}
+        />
+      )}
+    </AppShell>
   );
 }

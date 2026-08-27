@@ -1,32 +1,49 @@
-# System Workflows
+# Recovery Workflows
 
-## Core Closed Loop
-
-The AI Revenue Recovery Agent follows a strict closed-loop lifecycle for every detected failure event.
+The system follows a strict, idempotent 11-step pipeline for every revenue event.
 
 ```mermaid
-graph TD
-    A[Event Ingestion] --> B[Detect At-Risk Revenue]
-    B --> C[Create Recovery Case]
-    C --> D[AI Diagnosis & Strategy Selection]
-    D --> E[Policy & Safety Validation]
-    E --> F[Execute Recovery Action]
-    F --> G[Observe Outcome]
-    G --> H[Measure & Attribute Revenue]
-    H --> I[Record Audit Event]
+sequenceDiagram
+    participant Webhook
+    participant Orchestrator
+    participant Database
+    participant AI Engine
+    participant Policy Engine
     
-    subgraph Feedback & Analytics
-        I --> J[Merchant Dashboard]
-        I --> K[AI Model Refinement]
+    Webhook->>Orchestrator: Revenue Event (e.g. FAILED_PAYMENT)
+    
+    rect rgb(20, 25, 45)
+        Note over Orchestrator,Database: 1. Idempotency Check
+        Orchestrator->>Database: Check existing Recovery Case
     end
+    
+    Orchestrator->>Database: 2. Create Recovery Case
+    
+    rect rgb(30, 20, 45)
+        Note over Orchestrator,AI Engine: 3. AI Generation
+        Orchestrator->>AI Engine: Send Case Context (JSON)
+        AI Engine-->>Orchestrator: Strategy JSON (Decision, Confidence, Reason)
+    end
+    
+    Orchestrator->>Database: 4. Save Strategy (Status: GENERATED)
+    
+    rect rgb(20, 35, 30)
+        Note over Orchestrator,Policy Engine: 5. Policy Validation
+        Orchestrator->>Policy Engine: Validate Strategy
+        Policy Engine-->>Orchestrator: Approved / Rejected
+    end
+    
+    Orchestrator->>Database: 6. Update Strategy Status (VALIDATED / REJECTED)
+    
+    Orchestrator->>Database: 7. Create Recovery Action (if Approved)
+    
+    Note over Orchestrator: 8. Execute Action (e.g. Stripe Retry)
+    
+    Orchestrator->>Database: 9. Record Outcome (SUCCESS / FAILED)
+    
+    Note over Orchestrator,Database: 10. Revenue Attribution (if SUCCESS)
+    Orchestrator->>Database: Create Attribution Record
+    
+    Note over Orchestrator,Database: 11. Audit Trail
+    Orchestrator->>Database: Log all steps to AuditEvent table
 ```
-
-## Detailed Entity Lifecycle
-
-1. **RevenueEvent:** The initial trigger (e.g., a failed transaction).
-2. **RecoveryCase:** An active investigation opened based on the RevenueEvent.
-3. **StrategyDecision:** The recommendation proposed by the AI Strategy Engine.
-4. **RecoveryAction:** The concrete system action authorized by the Policy Engine.
-5. **RecoveryOutcome:** The result of executing the action.
-6. **RevenueAttribution:** The financial measurement of revenue successfully recovered.
-7. **AuditEvent:** The immutable ledger entry recording all state transitions.

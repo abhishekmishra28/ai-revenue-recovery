@@ -1,34 +1,39 @@
-# AI Usage & Guidelines
+# AI Usage & Guardrails
 
-## Gemini Strategy Engine
+We use **Google Gemini 3.6 Flash** for the `ai-strategy-engine`.
 
-This project utilizes Google's Gemini models for its core AI Strategy Engine.
+## Why Gemini Flash?
+Revenue recovery requires high throughput and low latency. The AI needs to make split-second decisions on incoming webhooks before executing policies. Gemini Flash provides the perfect balance of reasoning capability and speed.
 
-### Purpose
-The AI model is responsible for parsing failure contexts (e.g., "insufficient funds", "card expired") and proposing the highest probability recovery strategy.
+## The Prompt Structure
+The system does not allow free-form generation. The prompt enforces a strict JSON schema output.
 
-### Constraints & Guardrails
-- **No Direct Execution:** The AI model is strictly prevented from executing actions. Its sole output is a structured JSON proposal (`StrategyDecision`).
-- **Policy Validation:** Every AI proposal must be evaluated by the Policy Engine. If the AI suggests `RETRY_PAYMENT` but the merchant's policy limits retries to 3 (and 3 have occurred), the policy engine rejects the action.
-- **Auditability:** AI outputs, including the model version, prompt version, confidence score, and reasoning, are saved to the database as an `AuditEvent`.
-
-### Supported AI Decisions
-- `RETRY_PAYMENT`
-- `SEND_REMINDER`
-- `UPDATE_PAYMENT_METHOD`
-- `OFFER_INCENTIVE`
-- `NO_ACTION`
-
-### Example Output
+**Input:**
 ```json
 {
-  "tool": "gemini-recovery-engine",
-  "model": "gemini-3.6-flash",
-  "reason": "The payment failed due to insufficient funds, which is a transient failure eligible for retry.",
-  "decision": "RETRY_PAYMENT",
-  "riskLevel": "LOW",
-  "confidence": "0.9",
-  "promptVersion": "v3-gemini",
-  "expectedRecovery": "3999"
+  "recoveryCase": {
+    "caseType": "FAILED_PAYMENT",
+    "riskLevel": "MEDIUM",
+    "estimatedRecovery": "2450.00"
+  },
+  "transaction": {
+    "status": "DECLINED",
+    "failureCode": "insufficient_funds"
+  }
 }
 ```
+
+**Output schema:**
+```json
+{
+  "decision": "RETRY_PAYMENT", 
+  "confidence": 0.92,
+  "reason": "Payment failed due to insufficient funds, which is often transient. Retry recommended after 24 hours.",
+  "riskLevel": "LOW"
+}
+```
+
+## Guardrails
+1. **JSON Parsing & Validation:** The output is immediately parsed and validated against expected enums.
+2. **Read-Only AI:** The AI module only returns the JSON above. It has no capability to execute HTTP requests or write to the database.
+3. **Audit Tracking:** The exact model version (`gemini-3.6-flash`), prompt version, and the AI's natural language reasoning are saved to the `AuditEvent` table for every single decision.

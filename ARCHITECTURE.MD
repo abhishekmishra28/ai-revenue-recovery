@@ -1,67 +1,54 @@
-# Architecture Overview
+# System Architecture
 
-## AI Revenue Recovery Agent
+RevivePay AI is designed with an **Advanced Modular Domain-Driven Architecture**. This ensures that the AI generation layer is strictly decoupled from the deterministic policy and execution layers, which is crucial for financial systems.
 
-This project follows an **Advanced MVC (Modular Domain-Driven)** architecture. The system is designed to seamlessly integrate deterministic merchant policies with probabilistic AI reasoning, ensuring that AI recommendations are strictly validated before execution.
-
----
-
-## 1. High-Level System Architecture
-
-The application is split into two primary layers:
-
-- **Client (Frontend):** A Next.js (React) web application providing a premium fintech-style merchant dashboard.
-- **Server (Backend):** A Node.js (Express) server structured around domain modules, handling business logic, AI orchestration, and database operations.
+## Component Architecture
 
 ```mermaid
 graph TD
-    Client[Next.js Dashboard] --> |REST API| Server[Express API Server]
-    
-    subgraph Backend [Advanced MVC / Domain Modules]
-        Controllers --> Services
-        Services --> Repositories
-        Services --> AIEngine[AI Strategy Engine]
-        Services --> PolicyEngine[Policy Engine]
+    subgraph Client [Next.js Dashboard]
+        A[Dashboard UI] --> B[API Hooks]
+        B --> C[Fetch/SWR]
     end
-    
-    Server --> Backend
-    Repositories --> DB[(PostgreSQL)]
+
+    subgraph Server [Node.js / Express Backend]
+        C --> D[Express Router]
+        
+        subgraph Domains [Domain Modules]
+            E[Event Processing]
+            F[AI Strategy Engine]
+            G[Policy Engine]
+            H[Action Execution]
+            I[Revenue Attribution]
+            J[Audit Events]
+        end
+        
+        D --> Domains
+    end
+
+    subgraph External [External Services]
+        F -->|Prompt| K[Google Gemini API]
+        H -->|Execute| L[Payment Gateway / Email Provider]
+    end
+
+    subgraph Data [Persistence]
+        Domains --> M[(PostgreSQL + Prisma)]
+    end
 ```
 
----
+## Directory Structure
+The backend (`server/src/modules/`) is divided into distinct domains:
+- **`ai-strategy-engine/`**: Interacts with Gemini to generate strategies based on case context.
+- **`policy-engine/`**: Deterministic rule evaluator. Rejects any AI strategy that violates merchant limits (cooldowns, max amounts, max retries).
+- **`recovery-cases/`**: Manages the lifecycle and state machine of a recovery opportunity.
+- **`revenue-attribution/`**: Links successful outcomes back to the AI strategy that generated them for ROI calculation.
+- **`audit-events/`**: The source of truth for the timeline, recording everything immutably.
 
-## 2. Server Architecture (Advanced MVC / Modular)
-
-The backend avoids a monolithic structure and instead organizes code by **domain** under `/server/src/modules/`. This represents an advanced, scalable evolution of MVC:
-
-- **Controllers (The "C" in MVC):** Handle HTTP requests, input validation, and HTTP responses.
-- **Services (The "M" logic):** Contain the core business rules. This is where AI integration, policy validation, and action orchestration happen.
-- **Repositories (The "M" data access):** Abstract database interactions using Prisma ORM.
-
-### Key Modules:
-- `recovery-cases`: Manages the lifecycle of a recovery opportunity.
-- `ai-strategy-engine`: Interfaces with the Gemini model to propose recovery actions.
-- `policy-engine`: Deterministically validates AI proposals against merchant constraints.
-- `action-execution`: Executes the final, approved recovery actions.
-- `audit-events`: Records every state change for complete observability.
-
----
-
-## 3. Client Architecture
-
-The frontend is located at `/client` and is built with **Next.js 16**, **React 19**, and **Tailwind CSS**. 
-
-The UI layer is composed primarily of components in `client/src/components/dashboard/`, orchestrated by `client/src/app/dashboard/page.tsx` (acting as the View Controller).
-
-### Client Layers:
-- **Pages/Routes:** Define the high-level views (e.g., `app/dashboard/page.tsx`).
-- **Components:** Reusable UI elements (e.g., `RecoveryCasesTable.tsx`, `MetricCards.tsx`) located in `src/components/dashboard/`.
-- **API Client:** Centralized data fetching layer at `src/lib/api.ts` to abstract REST calls.
-
----
-
-## 4. Architectural Principles
-
-1. **Deterministic Execution:** The AI never executes actions directly. It only recommends. The Policy Engine acts as an invariant gatekeeper.
-2. **Idempotency:** Action execution and revenue attribution strictly use idempotency keys to prevent duplicate operations.
-3. **Auditability:** Every significant state change (AI generation, validation, action execution) is recorded chronologically as an Audit Event.
+## The Core Loop (Recovery Orchestrator)
+The `recovery-orchestrator` module is the brain that ties the domains together:
+1. `processRevenueEvent()`
+2. `generateStrategyDecision()`
+3. `validateStrategyDecision()`
+4. `createRecoveryAction()`
+5. `executeRecoveryAction()`
+6. `createRevenueAttribution()`

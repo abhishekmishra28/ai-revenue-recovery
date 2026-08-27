@@ -1,26 +1,241 @@
+/* ============================================================
+   RevivePay AI — Global Design System
+   A premium dark-theme fintech dashboard.
+   All CSS custom properties live here so every component
+   can reference the same tokens consistently.
+   ============================================================ */
+
+/* Inter font — the standard for modern fintech products */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+
 @import "tailwindcss";
 
+/* ============================================================
+   COLOUR PALETTE
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Core backgrounds — deep navy, like a Bloomberg terminal */
+  --bg-primary:   #0d0f1a;
+  --bg-secondary: #12162b;
+  --bg-surface:   #1a1f36;
+  --bg-elevated:  #212640;
+  --bg-hover:     #252b45;
+
+  /* Borders */
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong:  rgba(255, 255, 255, 0.18);
+
+  /* Text hierarchy */
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #64748b;
+  --text-disabled:  #475569;
+
+  /* Accent — vibrant indigo for primary actions */
+  --accent-primary:     #6366f1;
+  --accent-primary-dim: rgba(99, 102, 241, 0.15);
+  --accent-hover:       #818cf8;
+
+  /* Semantic colours */
+  --success:     #10b981;
+  --success-dim: rgba(16, 185, 129, 0.12);
+  --warning:     #f59e0b;
+  --warning-dim: rgba(245, 158, 11, 0.12);
+  --danger:      #ef4444;
+  --danger-dim:  rgba(239, 68, 68, 0.12);
+  --info:        #3b82f6;
+  --info-dim:    rgba(59, 130, 246, 0.12);
+
+  /* Purple for AI decisions */
+  --purple:     #a855f7;
+  --purple-dim: rgba(168, 85, 247, 0.12);
+
+  /* Chart colours */
+  --chart-green:  #10b981;
+  --chart-purple: #8b5cf6;
+  --chart-blue:   #3b82f6;
+  --chart-amber:  #f59e0b;
+  --chart-red:    #ef4444;
+
+  /* Sidebar width */
+  --sidebar-width: 240px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ============================================================
+   BASE RESET & TYPOGRAPHY
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   SCROLLBAR — subtle and dark-themed
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--bg-hover);
+}
+
+/* ============================================================
+   UTILITY ANIMATIONS
+   ============================================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Skeleton shimmer for loading states */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-elevated) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+/* Active AI agent status indicator */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--success);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ============================================================
+   CARD COMPONENT BASE
+   ============================================================ */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  transition: border-color 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--border-default);
+}
+
+/* ============================================================
+   BADGE COMPONENT BASE
+   ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   BUTTON COMPONENT BASE
+   ============================================================ */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }

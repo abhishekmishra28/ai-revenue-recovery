@@ -1,16 +1,17 @@
-# Architectural Decisions
+# Architectural Decisions Record (ADR)
 
-## 1. Deterministic Validation Over Probabilistic Execution
-**Context:** AI models can hallucinate or suggest actions outside of merchant constraints (e.g., offering a 50% discount instead of a 10% discount).
-**Decision:** We implemented a strict Policy Engine layer between AI recommendation and Action Execution.
-**Consequences:** This guarantees safety and compliance while leveraging AI solely for contextual reasoning and classification.
+## 1. Advanced Modular Monolith
+**Decision:** Build the backend as a highly modular monolith (`server/src/modules/*`) rather than microservices.
+**Reason:** Hackathons require velocity. Managing distributed state across microservices adds unnecessary overhead. The domain boundaries are strict, allowing for easy extraction to microservices later if scale requires it.
 
-## 2. Advanced MVC / Domain-Driven Backend
-**Context:** As a fintech application scales, a flat controller structure becomes unmanageable.
-**Decision:** We adopted a modular structure under `/server/src/modules/` grouping routes, controllers, services, and repositories by domain entity (e.g., `recovery-cases`, `audit-events`).
-**Consequences:** Easier testability, clear boundaries, and natural mapping to the database domain model.
+## 2. Server-side Idempotency
+**Decision:** Every critical function checks the database for existing processing states before acting.
+**Reason:** Payment webhooks are notoriously unreliable (they can be sent twice). If the orchestrator receives two webhooks for the same failed payment, it must not execute the AI recommendation or the payment retry twice.
 
-## 3. Idempotency Keys
-**Context:** Network retries could cause a recovery action (like billing a card) to happen multiple times.
-**Decision:** All executions and revenue attributions require a unique idempotency key derived from the StrategyDecision.
-**Consequences:** Eliminates the risk of double-charging or double-counting recovered revenue.
+## 3. Pure SVG Visualizations
+**Decision:** Build dashboard charts using pure SVG and math in React components instead of heavy libraries like Chart.js or Recharts.
+**Reason:** Ensures the dashboard loads instantly, is highly customizable to match the premium dark theme, and avoids unnecessary bundle bloat.
+
+## 4. Next.js App Router & Tailwind v4
+**Decision:** Use the latest frontend stack.
+**Reason:** Server Components reduce client bundle size, and Tailwind v4's CSS variable system perfectly supports our custom dark theme design system (`globals.css`).
