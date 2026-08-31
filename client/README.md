@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RevivePay AI — Frontend Client
 
-## Getting Started
+Premium dark-mode Next.js dashboard for the AI Revenue Recovery Engine.
 
-First, run the development server:
+## Tech Stack
+
+- **Framework:** Next.js 15 (App Router + Turbopack)
+- **UI:** React 19 + TypeScript
+- **Styling:** Tailwind CSS v4 (CSS-first config)
+- **Icons:** Lucide React
+- **Font:** Inter (UI) + JetBrains Mono (data)
+
+## Pages
+
+| Route | Description |
+|-------|-------------|
+| `/` | Dashboard with metrics, pipeline visualization, live data |
+| `/orchestrator` | Trigger the full AI recovery pipeline |
+| `/merchants` | Merchant cards |
+| `/revenue-events` | Revenue event log with status breakdown |
+| `/recovery-cases` | Recovery case list with filters + drill-down |
+| `/recovery-cases/[id]` | Full case detail: AI decisions, actions, outcomes, audit timeline |
+| `/ai-decisions` | All AI strategy decisions with confidence scores |
+| `/recovery-actions` | Recovery actions execution log |
+| `/outcomes` | Outcome results with recovered amounts |
+| `/revenue-attribution` | Attributed revenue with DIRECT/ASSISTED breakdown |
+| `/audit` | Live audit trail (table + timeline view) |
+
+## Quick Start
 
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Configure API URL
+cp .env.local.example .env.local
+# Edit .env.local: NEXT_PUBLIC_API_URL=http://localhost:4000
+
+# 3. Start dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> Make sure the backend server is running on port 4000 first.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Variables
 
-## Learn More
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:4000` | Backend API base URL |
 
-To learn more about Next.js, take a look at the following resources:
+## Design System
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+All design tokens live in `src/app/globals.css` as CSS variables:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```css
+--bg-base        /* #070a12 — page background */
+--bg-surface     /* #0c1020 — cards */
+--bg-elevated    /* #111828 — elevated surfaces */
+--gold           /* #f0b429 — primary accent */
+--blue           /* #4d7af7 — interactive */
+--green          /* #10b981 — success */
+--red            /* #ef4444 — failure */
+--purple         /* #8b5cf6 — AI elements */
+```
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── layout.tsx          # Root layout with sidebar
+│   ├── page.tsx            # Dashboard
+│   ├── globals.css         # Design tokens + Tailwind v4
+│   ├── orchestrator/       # Pipeline trigger
+│   ├── recovery-cases/
+│   │   ├── page.tsx        # Case list
+│   │   └── [id]/page.tsx   # Case detail
+│   └── ...                 # All other pages
+├── components/
+│   ├── Sidebar.tsx         # Navigation sidebar
+│   ├── PipelineFlow.tsx    # Animated pipeline visualization
+│   ├── LoadingState.tsx    # Loading/error/empty states
+│   └── StatusBadge.tsx     # Colored status badges
+└── lib/
+    ├── api.ts              # Centralized API client
+    ├── types.ts            # TypeScript interfaces
+    └── utils.ts            # Formatting + badge utilities
+```

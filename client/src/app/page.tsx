@@ -1,263 +1,677 @@
+"use client";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
+  RefreshCw,
   ArrowRight,
-  BarChart3,
-  BrainCircuit,
+  TrendingUp,
+  AlertCircle,
   CheckCircle2,
-  CircleDollarSign,
-  Cpu,
-  FileText,
-  ShieldCheck,
+  Clock,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
+import { api } from "@/lib/api";
+import type {
+  RecoveryCase,
+  RevenueAttribution,
+  AuditEvent,
+  RevenueEvent,
+} from "@/lib/types";
+import {
+  formatCurrency,
+  formatDateTime,
+  timeAgo,
+  caseStatusBadge,
+  priorityBadge,
+  eventTypeBadge,
+  formatEventType,
+} from "@/lib/utils";
+import PipelineFlow from "@/components/PipelineFlow";
+import { LoadingSpinner } from "@/components/LoadingState";
 
-/**
- * Landing page — the first thing anyone sees at "/"
- *
- * Purpose: Communicate the product value, show what the AI
- * does, and send the visitor into the dashboard.
- *
- * This is a server component — no data fetching needed here.
- */
-export default function HomePage() {
+interface DashboardData {
+  cases: RecoveryCase[];
+  attributions: RevenueAttribution[];
+  auditEvents: AuditEvent[];
+  revenueEvents: RevenueEvent[];
+  health: { status: string } | null;
+}
+
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  const load = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const [cases, attributions, auditEvents, revenueEvents, health] =
+        await Promise.allSettled([
+          api.recoveryCases.list(),
+          api.revenueAttributions.list(),
+          api.auditEvents.list(),
+          api.revenueEvents.list(),
+          api.health(),
+        ]);
+
+      setData({
+        cases: cases.status === "fulfilled" ? cases.value : [],
+        attributions:
+          attributions.status === "fulfilled" ? attributions.value : [],
+        auditEvents:
+          auditEvents.status === "fulfilled" ? auditEvents.value : [],
+        revenueEvents:
+          revenueEvents.status === "fulfilled" ? revenueEvents.value : [],
+        health: health.status === "fulfilled" ? health.value : null,
+      });
+    } catch (error) {
+      console.error("Dashboard load failed:", error);
+    } finally {
+      setLoading(false);
+      setLastRefresh(new Date());
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const iv = setInterval(load, 30000);
+    return () => clearInterval(iv);
+  }, [load]);
+
+  // ─── Computed metrics ───────────────────────────────────────
+  const totalCases = data?.cases.length ?? 0;
+  const activeCases =
+    data?.cases.filter((c) => c.status === "OPEN" || c.status === "IN_PROGRESS")
+      .length ?? 0;
+  const recoveredCases =
+    data?.cases.filter((c) => c.status === "RECOVERED").length ?? 0;
+  const successRate =
+    totalCases > 0 ? Math.round((recoveredCases / totalCases) * 100) : 0;
+
+  const totalRecovered = data?.attributions.reduce(
+    (sum, a) => sum + parseFloat(a.amount || "0"),
+    0
+  ) ?? 0;
+
+  const recentCases = data?.cases.slice(0, 8) ?? [];
+  const recentEvents = data?.auditEvents.slice(0, 6) ?? [];
+  const processedEvents =
+    data?.revenueEvents.filter((e) => e.processedAt).length ?? 0;
+  const pendingEvents =
+    data?.revenueEvents.filter((e) => !e.processedAt).length ?? 0;
+
+  const pipelineStages = [
+    {
+      label: "Revenue\nEvent",
+      icon: "⚡",
+      count: data?.revenueEvents.length ?? 0,
+      href: "/revenue-events",
+      color: "var(--gold)",
+      bg: "var(--gold-dim)",
+    },
+    {
+      label: "Recovery\nCase",
+      icon: "📋",
+      count: totalCases,
+      href: "/recovery-cases",
+      color: "var(--blue)",
+      bg: "var(--blue-dim)",
+    },
+    {
+      label: "AI\nStrategy",
+      icon: "🧠",
+      count: undefined,
+      href: "/ai-decisions",
+      color: "var(--purple)",
+      bg: "var(--purple-dim)",
+    },
+    {
+      label: "Policy\nCheck",
+      icon: "🛡️",
+      count: undefined,
+      href: "/ai-decisions",
+      color: "var(--orange)",
+      bg: "var(--orange-dim)",
+    },
+    {
+      label: "Recovery\nAction",
+      icon: "⚙️",
+      count: undefined,
+      href: "/recovery-actions",
+      color: "var(--blue)",
+      bg: "var(--blue-dim)",
+    },
+    {
+      label: "Outcome",
+      icon: "📊",
+      count: undefined,
+      href: "/outcomes",
+      color: "var(--green)",
+      bg: "var(--green-dim)",
+    },
+    {
+      label: "Attribution",
+      icon: "💰",
+      count: data?.attributions.length ?? 0,
+      href: "/revenue-attribution",
+      color: "var(--gold)",
+      bg: "var(--gold-dim)",
+    },
+  ];
+
+  const isHealthy = data?.health?.status === "ok" || data?.health?.status === "healthy";
+
   return (
-    <main
-      className="min-h-screen"
-      style={{ background: "var(--bg-primary)", color: "var(--text-primary)" }}
-    >
-      {/* ── Navigation bar ─────────────────────────────── */}
-      <nav
-        className="sticky top-0 z-50 flex items-center justify-between px-6 py-4"
-        style={{
-          background: "rgba(13,15,26,0.9)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid var(--border-subtle)",
-        }}
-      >
-        <div className="flex items-center gap-2.5">
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-lg"
-            style={{ background: "linear-gradient(135deg, #6366f1, #a855f7)" }}
-          >
-            <BrainCircuit className="h-4 w-4 text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold">RevivePay AI</p>
-            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-              Revenue Recovery Agent
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="btn-primary text-sm"
-          >
-            Open Dashboard
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </nav>
-
-      {/* ── Hero ───────────────────────────────────────── */}
-      <section className="mx-auto max-w-5xl px-6 pt-24 pb-16 text-center">
-        {/* Tagline pill */}
-        <div
-          className="mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold"
-          style={{
-            background: "var(--accent-primary-dim)",
-            border: "1px solid rgba(99,102,241,0.3)",
-            color: "var(--accent-hover)",
-          }}
-        >
-          <span
-            className="h-1.5 w-1.5 rounded-full"
-            style={{ background: "var(--accent-primary)" }}
-          />
-          Built for Hackathon — Real AI, Real Revenue
-        </div>
-
-        <h1
-          className="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl"
-          style={{ color: "var(--text-primary)" }}
-        >
-          Stop losing revenue to{" "}
-          <span
+    <>
+      {/* Header */}
+      <div className="page-header">
+        <div style={{ flex: 1 }}>
+          <h1
             style={{
-              backgroundImage: "linear-gradient(135deg, #6366f1, #a855f7)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
+              fontSize: 18,
+              fontWeight: 700,
+              color: "var(--text-primary)",
+              margin: 0,
             }}
           >
-            failed payments
-          </span>
-        </h1>
-
-        <p
-          className="mx-auto mt-6 max-w-2xl text-lg leading-8"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          RevivePay AI is an autonomous revenue recovery agent that detects
-          at-risk payments, generates AI-powered recovery strategies, validates
-          them against your policies, and executes them — all with a complete
-          audit trail.
-        </p>
-
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <Link href="/dashboard" className="btn-primary px-8 py-3 text-sm">
-            View Live Dashboard
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        {/* Social proof stats */}
-        <div className="mt-16 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Revenue Recovered", value: "₹18.7L+", color: "#10b981" },
-            { label: "Recovery Rate",     value: "66.0%",   color: "#6366f1" },
-            { label: "Active Cases",      value: "1,286",   color: "#f59e0b" },
-            { label: "AI Decisions",      value: "3,492",   color: "#a855f7" },
-          ].map(({ label, value, color }) => (
-            <div
-              key={label}
-              className="rounded-xl p-4 text-center"
-              style={{
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border-subtle)",
-              }}
-            >
-              <p className="text-2xl font-bold" style={{ color }}>
-                {value}
-              </p>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                {label}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Feature cards ──────────────────────────────── */}
-      <section
-        className="py-16"
-        style={{ borderTop: "1px solid var(--border-subtle)" }}
-      >
-        <div className="mx-auto max-w-5xl px-6">
-          <p
-            className="mb-2 text-center text-xs font-semibold uppercase tracking-wider"
-            style={{ color: "var(--accent-primary)" }}
+            Dashboard
+          </h1>
+          <div
+            style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}
           >
-            What Merchants Get
-          </p>
-          <h2 className="text-center text-2xl font-bold mb-10">
-            The complete recovery stack
-          </h2>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                icon: CircleDollarSign,
-                color: "#10b981",
-                title: "Recover More Revenue",
-                desc: "Automatically retries failed payments, sends reminders, and offers smart incentives.",
-              },
-              {
-                icon: ShieldCheck,
-                color: "#6366f1",
-                title: "Safe, Policy-Compliant",
-                desc: "Every AI action is validated by a deterministic policy engine before execution.",
-              },
-              {
-                icon: FileText,
-                color: "#f59e0b",
-                title: "Full Audit Trail",
-                desc: "Every AI decision, policy check, and action execution is recorded immutably.",
-              },
-              {
-                icon: BarChart3,
-                color: "#a855f7",
-                title: "Revenue Attribution",
-                desc: "See exactly how much revenue each recovery action brought back, directly.",
-              },
-            ].map(({ icon: Icon, color, title, desc }) => (
-              <div
-                key={title}
-                className="rounded-xl p-5 transition-all duration-200"
-                style={{
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border-subtle)",
-                }}
-              >
-                <div
-                  className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg"
-                  style={{ background: `${color}15` }}
-                >
-                  <Icon className="h-5 w-5" style={{ color }} />
-                </div>
-                <h3 className="text-sm font-semibold">{title}</h3>
-                <p
-                  className="mt-2 text-xs leading-5"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  {desc}
-                </p>
-              </div>
-            ))}
+            Last updated {timeAgo(lastRefresh.toISOString())}
           </div>
         </div>
-      </section>
 
-      {/* ── Demo CTA ───────────────────────────────────── */}
-      <section className="py-16 px-6">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Health indicator */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: isHealthy ? "var(--green)" : "var(--red)",
+              background: isHealthy ? "var(--green-dim)" : "var(--red-dim)",
+              padding: "5px 10px",
+              borderRadius: 100,
+            }}
+          >
+            {loading ? (
+              <LoadingSpinner size="sm" />
+            ) : isHealthy ? (
+              <Wifi size={12} />
+            ) : (
+              <WifiOff size={12} />
+            )}
+            {data === null ? "Connecting…" : isHealthy ? "API Online" : "API Offline"}
+          </div>
+
+          <button className="btn btn-ghost" onClick={load} disabled={loading}>
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="page-body fade-in">
+        {/* ─── Metric Cards ──────────────────────────────────── */}
         <div
-          className="mx-auto max-w-3xl rounded-2xl p-10 text-center"
           style={{
-            background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(168,85,247,0.12))",
-            border: "1px solid rgba(99,102,241,0.25)",
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 16,
+            marginBottom: 28,
           }}
         >
-          <Cpu className="mx-auto mb-4 h-10 w-10" style={{ color: "var(--accent-primary)" }} />
-          <h2 className="text-2xl font-bold">See it in action</h2>
-          <p className="mt-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-            The live dashboard is connected to a real Node.js backend with
-            PostgreSQL, a Gemini AI strategy engine, and a deterministic
-            policy validator.
-          </p>
-
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/dashboard" className="btn-primary">
-              Open Dashboard
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+          <div className="metric-card gold">
+            <div
+              style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
+            >
+              <div>
+                <div className="metric-value" style={{ color: "var(--gold)" }}>
+                  {loading ? "—" : formatCurrency(totalRecovered, "INR")}
+                </div>
+                <div className="metric-label">Total Recovered</div>
+              </div>
+              <TrendingUp size={20} color="var(--gold)" style={{ opacity: 0.6 }} />
+            </div>
+            <div className="metric-sub">{data?.attributions.length ?? "—"} attributions</div>
           </div>
 
-          <div className="mt-6 flex flex-wrap justify-center gap-4">
-            {[
-              "Real Gemini AI",
-              "Policy Validation",
-              "Full Audit Trail",
-              "Revenue Attribution",
-            ].map((feat) => (
-              <div key={feat} className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5" style={{ color: "var(--success)" }} />
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                  {feat}
-                </span>
+          <div className="metric-card blue">
+            <div
+              style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
+            >
+              <div>
+                <div className="metric-value" style={{ color: "var(--blue)" }}>
+                  {loading ? "—" : totalCases}
+                </div>
+                <div className="metric-label">Total Cases</div>
               </div>
-            ))}
+              <AlertCircle size={20} color="var(--blue)" style={{ opacity: 0.6 }} />
+            </div>
+            <div className="metric-sub">{activeCases} currently active</div>
+          </div>
+
+          <div className="metric-card green">
+            <div
+              style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
+            >
+              <div>
+                <div className="metric-value" style={{ color: "var(--green)" }}>
+                  {loading ? "—" : `${successRate}%`}
+                </div>
+                <div className="metric-label">Recovery Rate</div>
+              </div>
+              <CheckCircle2 size={20} color="var(--green)" style={{ opacity: 0.6 }} />
+            </div>
+            <div className="metric-sub">{recoveredCases} cases recovered</div>
+          </div>
+
+          <div className="metric-card purple">
+            <div
+              style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
+            >
+              <div>
+                <div className="metric-value" style={{ color: "var(--purple)" }}>
+                  {loading ? "—" : pendingEvents}
+                </div>
+                <div className="metric-label">Pending Events</div>
+              </div>
+              <Clock size={20} color="var(--purple)" style={{ opacity: 0.6 }} />
+            </div>
+            <div className="metric-sub">{processedEvents} events processed</div>
           </div>
         </div>
-      </section>
 
-      {/* ── Footer ─────────────────────────────────────── */}
-      <footer
-        className="px-6 py-6"
-        style={{ borderTop: "1px solid var(--border-subtle)" }}
-      >
-        <p className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
-          RevivePay AI — AI Revenue Recovery Agent · Built with Next.js, Node.js, Gemini AI, and PostgreSQL
-        </p>
-      </footer>
-    </main>
+        {/* ─── Recovery Pipeline ─────────────────────────────── */}
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 24,
+            }}
+          >
+            <div>
+              <div
+                style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}
+              >
+                Recovery Pipeline
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                End-to-end AI recovery flow — click any stage to explore
+              </div>
+            </div>
+            <Link href="/orchestrator" className="btn btn-primary">
+              <span>Run Pipeline</span>
+              <ArrowRight size={13} />
+            </Link>
+          </div>
+          <PipelineFlow stages={pipelineStages} animated />
+        </div>
+
+        {/* ─── Bottom grid ───────────────────────────────────── */}
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}
+        >
+          {/* Recent Cases */}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid var(--border-dim)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                Recent Recovery Cases
+              </span>
+              <Link
+                href="/recovery-cases"
+                style={{
+                  fontSize: 12,
+                  color: "var(--gold)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                View all <ArrowRight size={11} />
+              </Link>
+            </div>
+
+            {loading ? (
+              <div style={{ padding: 40, display: "flex", justifyContent: "center" }}>
+                <LoadingSpinner />
+              </div>
+            ) : recentCases.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-text">No recovery cases yet</div>
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                    <th>Amount</th>
+                    <th>Opened</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentCases.map((c) => (
+                    <tr key={c.id}>
+                      <td>
+                        <Link
+                          href={`/recovery-cases/${c.id}`}
+                          style={{
+                            color: "var(--blue)",
+                            fontSize: 12,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {c.caseType.replace(/_/g, " ")}
+                        </Link>
+                      </td>
+                      <td>
+                        <span className={`badge ${caseStatusBadge(c.status)}`} style={{ fontSize: 10 }}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${priorityBadge(c.priority)}`} style={{ fontSize: 10 }}>
+                          {c.priority}
+                        </span>
+                      </td>
+                      <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                        {c.estimatedRecovery
+                          ? formatCurrency(c.estimatedRecovery, c.currency)
+                          : "—"}
+                      </td>
+                      <td style={{ color: "var(--text-muted)", fontSize: 11 }}>
+                        {timeAgo(c.openedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Audit Log */}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid var(--border-dim)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                Live Audit Events
+              </span>
+              <Link
+                href="/audit"
+                style={{
+                  fontSize: 12,
+                  color: "var(--gold)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                View all <ArrowRight size={11} />
+              </Link>
+            </div>
+
+            {loading ? (
+              <div style={{ padding: 40, display: "flex", justifyContent: "center" }}>
+                <LoadingSpinner />
+              </div>
+            ) : recentEvents.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-text">No audit events yet</div>
+              </div>
+            ) : (
+              <div style={{ padding: "8px 0" }}>
+                {recentEvents.map((ev) => (
+                  <div
+                    key={ev.id}
+                    style={{
+                      padding: "10px 20px",
+                      borderBottom: "1px solid var(--border-dim)",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 12,
+                    }}
+                  >
+                    <ActorIcon actor={ev.actorType} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: "var(--text-primary)",
+                          marginBottom: 2,
+                        }}
+                      >
+                        {ev.eventType.replace(/_/g, " ")}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        {ev.actorType} · {timeAgo(ev.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Revenue Events breakdown */}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid var(--border-dim)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <span style={{ fontWeight: 600, fontSize: 14 }}>Revenue Events</span>
+              <Link
+                href="/revenue-events"
+                style={{
+                  fontSize: 12,
+                  color: "var(--gold)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                View all <ArrowRight size={11} />
+              </Link>
+            </div>
+            {loading ? (
+              <div style={{ padding: 40, display: "flex", justifyContent: "center" }}>
+                <LoadingSpinner />
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Event Type</th>
+                    <th>Status</th>
+                    <th>Occurred</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.revenueEvents.slice(0, 6) ?? []).map((ev) => (
+                    <tr key={ev.id}>
+                      <td>
+                        <span
+                          className={`badge ${eventTypeBadge(ev.eventType)}`}
+                          style={{ fontSize: 10 }}
+                        >
+                          {formatEventType(ev.eventType)}
+                        </span>
+                      </td>
+                      <td>
+                        {ev.processedAt ? (
+                          <span className="badge badge-green" style={{ fontSize: 10 }}>
+                            Processed
+                          </span>
+                        ) : (
+                          <span className="badge badge-muted" style={{ fontSize: 10 }}>
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ color: "var(--text-muted)", fontSize: 11 }}>
+                        {timeAgo(ev.occurredAt)}
+                      </td>
+                    </tr>
+                  ))}
+                  {(data?.revenueEvents.length ?? 0) === 0 && (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        style={{
+                          textAlign: "center",
+                          color: "var(--text-muted)",
+                          padding: 24,
+                        }}
+                      >
+                        No revenue events yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Case status distribution */}
+          <div className="card">
+            <div
+              style={{ fontWeight: 600, fontSize: 14, marginBottom: 20 }}
+            >
+              Case Status Distribution
+            </div>
+            {loading ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+                <LoadingSpinner />
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {[
+                  { status: "OPEN", color: "var(--blue)", label: "Open" },
+                  { status: "IN_PROGRESS", color: "var(--orange)", label: "In Progress" },
+                  { status: "RECOVERED", color: "var(--green)", label: "Recovered" },
+                  { status: "FAILED", color: "var(--red)", label: "Failed" },
+                  { status: "CLOSED", color: "var(--text-muted)", label: "Closed" },
+                ].map(({ status, color, label }) => {
+                  const count =
+                    data?.cases.filter((c) => c.status === status).length ?? 0;
+                  const pct = totalCases > 0 ? (count / totalCases) * 100 : 0;
+                  return (
+                    <div key={status}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: 5,
+                        }}
+                      >
+                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                          {label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontFamily: "var(--font-mono)",
+                            color,
+                          }}
+                        >
+                          {count}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          height: 4,
+                          background: "var(--border-dim)",
+                          borderRadius: 2,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${pct}%`,
+                            background: color,
+                            borderRadius: 2,
+                            transition: "width 0.6s ease",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                {totalCases === 0 && (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      color: "var(--text-muted)",
+                      fontSize: 13,
+                      padding: "16px 0",
+                    }}
+                  >
+                    No cases to display
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ActorIcon({ actor }: { actor: string }) {
+  const map: Record<string, { icon: string; color: string; bg: string }> = {
+    AI: { icon: "🧠", color: "var(--purple)", bg: "var(--purple-dim)" },
+    SYSTEM: { icon: "⚙️", color: "var(--blue)", bg: "var(--blue-dim)" },
+    MERCHANT: { icon: "🏪", color: "var(--gold)", bg: "var(--gold-dim)" },
+    ADMIN: { icon: "👤", color: "var(--orange)", bg: "var(--orange-dim)" },
+  };
+  const style = map[actor] ?? { icon: "❓", color: "var(--text-muted)", bg: "var(--bg-elevated)" };
+  return (
+    <div
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 7,
+        background: style.bg,
+        border: `1px solid ${style.color}40`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 14,
+        flexShrink: 0,
+      }}
+    >
+      {style.icon}
+    </div>
   );
 }

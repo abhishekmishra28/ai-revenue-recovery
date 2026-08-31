@@ -1,39 +1,27 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+
+import Sidebar from "@/components/Sidebar";
+
 import "./globals.css";
 
-// Inter is the go-to font for premium fintech products —
-// clean, readable at small sizes, and professional at large ones.
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
-  title: "RevivePay AI — Revenue Recovery Agent",
+  title: "RevivePay AI — Revenue Recovery Engine",
   description:
-    "AI-powered autonomous revenue recovery for merchants. " +
-    "Detect at-risk revenue, apply intelligent recovery strategies, " +
-    "and track every rupee back to the source.",
-  keywords: [
-    "revenue recovery",
-    "AI payments",
-    "failed payment recovery",
-    "merchant tools",
-    "fintech AI",
-  ],
+    "AI-powered revenue recovery from failed payments, abandoned checkouts, and subscription failures.",
 };
 
-type Props = {
+export default function RootLayout({
+  children,
+}: {
   children: React.ReactNode;
-};
-
-export default function RootLayout({ children }: Props) {
+}) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`}>
-      <body className="h-full antialiased">
-        {children}
+    <html lang="en">
+      <body>
+        <div className="app-shell">
+          <Sidebar />
+          <main className="main-content">{children}</main>
+        </div>
       </body>
     </html>
   );

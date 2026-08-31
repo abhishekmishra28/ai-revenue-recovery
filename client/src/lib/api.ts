@@ -1,284 +1,254 @@
 import type {
-  ApiResponse,
-  AuditEvent,
-  RecoveryCase,
-  RecoveryOutcome,
-  RevenueAttribution,
+  Merchant,
+  Customer,
+  Transaction,
   RevenueEvent,
-  StrategyDecision,
-} from "@/types/recovery";
+  RecoveryCase,
+  AIStrategyDecision,
+  RecoveryAction,
+  Outcome,
+  RevenueAttribution,
+  AuditEvent,
+  RecoveryPipelineResponse,
+  HealthStatus,
+} from "./types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:4000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-async function request<T>(
-  endpoint: string,
-  options?: RequestInit,
-): Promise<T> {
-  const response = await fetch(
-    `${API_BASE_URL}${endpoint}`,
-    {
-      ...options,
-
-      headers: {
-        "Content-Type": "application/json",
-        ...(options?.headers || {}),
-      },
-
-      cache: "no-store",
+async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
     },
-  );
-
-  if (!response.ok) {
-    let message =
-      `API request failed: ${response.status}`;
-
-    try {
-      const errorBody = await response.json();
-
-      if (errorBody?.error) {
-        message = errorBody.error;
-      }
-    } catch {
-      // Ignore invalid error response.
-    }
-
-    throw new Error(message);
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
   }
-
-  return response.json();
+  return res.json();
 }
-
-/* =========================================================
-   HEALTH
-========================================================= */
-
+async function fetchData<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  const response = await fetchApi<{ data: T }>(path, options);
+  return response.data;
+}
 export const api = {
-  health: {
-    get: () =>
-      request<ApiResponse<unknown>>(
-        "/health",
-      ),
-
-    database: () =>
-      request<ApiResponse<unknown>>(
-        "/health/db",
-      ),
-  },
-
-  /* =======================================================
-     MERCHANTS
-  ======================================================= */
+  health: () => fetchApi<HealthStatus>("/health"),
 
   merchants: {
-    list: () =>
-      request<ApiResponse<unknown[]>>(
-        "/merchants",
-      ),
+    list: () => fetchData<Merchant[]>("/merchants"),
 
     get: (id: string) =>
-      request<ApiResponse<unknown>>(
-        `/merchants/${id}`,
-      ),
+      fetchData<Merchant>(`/merchants/${id}`),
   },
-
-  /* =======================================================
-     CUSTOMERS
-  ======================================================= */
 
   customers: {
-    list: () =>
-      request<ApiResponse<unknown[]>>(
-        "/customers",
-      ),
-
+    list: () => fetchApi<Customer[]>("/customers"),
     byMerchant: (merchantId: string) =>
-      request<ApiResponse<unknown[]>>(
-        `/customers/merchant/${merchantId}`,
-      ),
-
-    get: (id: string) =>
-      request<ApiResponse<unknown>>(
-        `/customers/${id}`,
-      ),
+      fetchApi<Customer[]>(`/customers/merchant/${merchantId}`),
+    get: (id: string) => fetchApi<Customer>(`/customers/${id}`),
   },
-
-  /* =======================================================
-     TRANSACTIONS
-  ======================================================= */
 
   transactions: {
-    list: () =>
-      request<ApiResponse<unknown[]>>(
-        "/transactions",
-      ),
-
-    byCustomer: (customerId: string) =>
-      request<ApiResponse<unknown[]>>(
-        `/transactions/customer/${customerId}`,
-      ),
-
+    list: () => fetchApi<Transaction[]>("/transactions"),
     byMerchant: (merchantId: string) =>
-      request<ApiResponse<unknown[]>>(
-        `/transactions/merchant/${merchantId}`,
-      ),
-
-    get: (id: string) =>
-      request<ApiResponse<unknown>>(
-        `/transactions/${id}`,
-      ),
+      fetchApi<Transaction[]>(`/transactions/merchant/${merchantId}`),
+    get: (id: string) => fetchApi<Transaction>(`/transactions/${id}`),
   },
-
-  /* =======================================================
-     REVENUE EVENTS
-  ======================================================= */
 
   revenueEvents: {
-    list: () =>
-      request<ApiResponse<RevenueEvent[]>>(
-        "/revenue-events",
-      ),
+    list: async () => {
+      const response = await fetchApi<{
+        data: RevenueEvent[];
+      }>("/revenue-events");
 
-    byMerchant: (merchantId: string) =>
-      request<ApiResponse<RevenueEvent[]>>(
-        `/revenue-events/merchant/${merchantId}`,
-      ),
+      return response.data;
+    },
 
-    byCustomer: (customerId: string) =>
-      request<ApiResponse<RevenueEvent[]>>(
-        `/revenue-events/customer/${customerId}`,
-      ),
+    byMerchant: async (merchantId: string) => {
+      const response = await fetchApi<{
+        data: RevenueEvent[];
+      }>(`/revenue-events/merchant/${merchantId}`);
 
-    get: (id: string) =>
-      request<ApiResponse<RevenueEvent>>(
-        `/revenue-events/${id}`,
-      ),
+      return response.data;
+    },
+
+    get: async (id: string) => {
+      const response = await fetchApi<{
+        data: RevenueEvent;
+      }>(`/revenue-events/${id}`);
+
+      return response.data;
+    },
   },
-
-  /* =======================================================
-     RECOVERY CASES
-  ======================================================= */
 
   recoveryCases: {
-    list: () =>
-      request<ApiResponse<RecoveryCase[]>>(
-        "/recovery-cases",
-      ),
+    list: async () => {
+      const response = await fetchApi<{ data: RecoveryCase[] }>(
+        "/recovery-cases"
+      );
 
-    get: (id: string) =>
-      request<ApiResponse<RecoveryCase>>(
-        `/recovery-cases/${id}`,
-      ),
+      return response.data;
+    },
+
+    get: async (id: string) => {
+      const response = await fetchApi<{ data: RecoveryCase }>(
+        `/recovery-cases/${id}`
+      );
+
+      return response.data;
+    },
   },
-
-  /* =======================================================
-     AI DECISIONS
-  ======================================================= */
 
   aiDecisions: {
     list: () =>
-      request<ApiResponse<StrategyDecision[]>>(
-        "/ai-decisions",
+      fetchData<AIStrategyDecision[]>("/ai-decisions"),
+
+    byCase: (caseId: string) =>
+      fetchData<AIStrategyDecision[]>(
+        `/ai-decisions/recovery-case/${caseId}`
       ),
 
     get: (id: string) =>
-      request<ApiResponse<StrategyDecision>>(
-        `/ai-decisions/${id}`,
+      fetchData<AIStrategyDecision>(
+        `/ai-decisions/${id}`
       ),
   },
 
-  /* =======================================================
-     OUTCOMES
-  ======================================================= */
+  recoveryActions: {
+    list: () =>
+      fetchData<RecoveryAction[]>("/recovery-actions"),
+
+    byCase: (caseId: string) =>
+      fetchData<RecoveryAction[]>(
+        `/recovery-actions/recovery-case/${caseId}`
+      ),
+
+    get: (id: string) =>
+      fetchData<RecoveryAction>(
+        `/recovery-actions/${id}`
+      ),
+  },
 
   outcomes: {
     list: () =>
-      request<ApiResponse<RecoveryOutcome[]>>(
-        "/outcomes",
+      fetchData<Outcome[]>("/outcomes"),
+
+    byCase: (caseId: string) =>
+      fetchData<Outcome[]>(
+        `/outcomes/recovery-case/${caseId}`
       ),
 
     get: (id: string) =>
-      request<ApiResponse<RecoveryOutcome>>(
-        `/outcomes/${id}`,
-      ),
-
-    byRecoveryCase: (recoveryCaseId: string) =>
-      request<ApiResponse<RecoveryOutcome[]>>(
-        `/outcomes/recovery-case/${recoveryCaseId}`,
-      ),
-
-    byAction: (recoveryActionId: string) =>
-      request<ApiResponse<RecoveryOutcome[]>>(
-        `/outcomes/recovery-action/${recoveryActionId}`,
+      fetchData<Outcome>(
+        `/outcomes/${id}`
       ),
   },
 
-  /* =======================================================
-     REVENUE ATTRIBUTION
-  ======================================================= */
+  revenueAttributions: {
+    list: async () => {
+      const response = await fetchApi<{
+        data: RevenueAttribution[];
+      }>("/revenue-attribution");
 
-  revenueAttribution: {
-    list: () =>
-      request<ApiResponse<RevenueAttribution[]>>(
-        "/revenue-attribution",
-      ),
+      return response.data;
+    },
 
-    get: (id: string) =>
-      request<ApiResponse<RevenueAttribution>>(
-        `/revenue-attribution/${id}`,
-      ),
+    byCase: async (caseId: string) => {
+      const response = await fetchApi<{
+        data: RevenueAttribution[];
+      }>(`/revenue-attribution/recovery-case/${caseId}`);
 
-    byMerchant: (merchantId: string) =>
-      request<ApiResponse<RevenueAttribution[]>>(
-        `/revenue-attribution/merchant/${merchantId}`,
-      ),
+      return response.data;
+    },
 
-    byRecoveryCase: (recoveryCaseId: string) =>
-      request<ApiResponse<RevenueAttribution[]>>(
-        `/revenue-attribution/recovery-case/${recoveryCaseId}`,
-      ),
+    get: async (id: string) => {
+      const response = await fetchApi<{
+        data: RevenueAttribution;
+      }>(`/revenue-attribution/${id}`);
+
+      return response.data;
+    },
   },
 
-  /* =======================================================
-     AUDIT EVENTS
-  ======================================================= */
+  auditEvents: {
+    list: async () => {
+      const response = await fetchApi<{
+        data: AuditEvent[];
+      }>("/audit-events");
 
-  audit: {
-    all: () =>
-      request<ApiResponse<AuditEvent[]>>(
-        "/audit-events",
-      ),
+      return response.data;
+    },
 
-    get: (id: string) =>
-      request<ApiResponse<AuditEvent>>(
-        `/audit-events/${id}`,
-      ),
+    byMerchant: async (merchantId: string) => {
+      const response = await fetchApi<{
+        data: AuditEvent[];
+      }>(`/audit/merchant/${merchantId}`);
 
-    byMerchant: (merchantId: string) =>
-      request<ApiResponse<AuditEvent[]>>(
-        `/audit-events/merchant/${merchantId}`,
-      ),
+      return response.data;
+    },
 
-    byRecoveryCase: (recoveryCaseId: string) =>
-      request<ApiResponse<AuditEvent[]>>(
-        `/audit-events/recovery-case/${recoveryCaseId}`,
-      ),
+    byCase: async (caseId: string) => {
+      const response = await fetchApi<{
+        data: AuditEvent[];
+      }>(`/audit/recovery-case/${caseId}`);
+
+      return response.data;
+    },
+
+    get: async (id: string) => {
+      const response = await fetchApi<{
+        data: AuditEvent;
+      }>(`/audit-events/${id}`);
+
+      return response.data;
+    },
   },
 
-  /* =======================================================
-     RECOVERY ORCHESTRATOR
-  ======================================================= */
-
-  recoveryOrchestrator: {
-    processRevenueEvent: (
-      revenueEventId: string,
-    ) =>
-      request<ApiResponse<unknown>>(
+  orchestrator: {
+    process: (revenueEventId: string) =>
+      fetchApi<RecoveryPipelineResponse>(
         `/recovery-orchestrator/revenue-event/${revenueEventId}`,
-        {
-          method: "POST",
-        },
+        { method: "POST" }
+      ),
+  },
+
+  strategyEngine: {
+    generate: (recoveryCaseId: string) =>
+      fetchApi<AIStrategyDecision>(
+        `/ai-strategy-engine/generate/${recoveryCaseId}`,
+        { method: "POST" }
+      ),
+  },
+
+  policyEngine: {
+    validate: (strategyDecisionId: string) =>
+      fetchApi<AIStrategyDecision>(
+        `/policy-engine/validate/${strategyDecisionId}`,
+        { method: "POST" }
+      ),
+  },
+
+  actionExecution: {
+    execute: (recoveryActionId: string) =>
+      fetchApi<RecoveryAction>(
+        `/action-execution/execute/${recoveryActionId}`,
+        { method: "POST" }
+      ),
+  },
+
+  recoveryEngine: {
+    detect: (revenueEventId: string) =>
+      fetchApi<RecoveryCase>(
+        `/recovery-engine/detect/${revenueEventId}`,
+        { method: "POST" }
       ),
   },
 };
+
+export { API_BASE };

@@ -20,6 +20,8 @@ import type {
   RevenueAttribution,
 } from "@/types/recovery";
 
+import AIInsights from "@/components/dashboard/AIInsights";
+
 // ──────────────────────────────────────────────────────────
 // Dashboard page
 //
@@ -168,7 +170,7 @@ export default function DashboardPage() {
       pageSubtitle="Here's what's happening with your revenue recovery today."
     >
       {/* The main content scrolls — panel sits on top of it */}
-      <div className="space-y-6">
+      <div className="mx-auto max-w-7xl space-y-8">
 
         {/* ── 1. KPI Cards ─────────────────────────────── */}
         <MetricCards
@@ -211,11 +213,17 @@ export default function DashboardPage() {
           loading={loading}
         />
 
-        {/* ── 4. Recent Audit Activity ──────────────────── */}
-        <RecentAuditEvents
-          events={auditEvents}
-          limit={6}
-        />
+        {/* ── 4. AI Insights & Audit Activity ───────────── */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <AIInsights
+            recoveryCases={recoveryCases}
+            auditEvents={auditEvents}
+          />
+          <RecentAuditEvents
+            events={auditEvents}
+            limit={6}
+          />
+        </div>
 
         {/* ── 5. How It Works ───────────────────────────── */}
         <HowItWorksSection />
