@@ -1,4 +1,5 @@
 services:
+  # ─── PostgreSQL Database ────────────────────────────────────────────────────
   postgres:
     image: postgres:17-alpine
     container_name: revenue-recovery-postgres
@@ -16,6 +17,47 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # ─── Express API Server ─────────────────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: revenue-recovery-server
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://revenue_admin:revenue_dev_password@postgres:5432/revenue_recovery
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ─── Next.js Dashboard ─────────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    container_name: revenue-recovery-client
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    depends_on:
+      server:
+        condition: service_healthy
 
 volumes:
   postgres_data:
