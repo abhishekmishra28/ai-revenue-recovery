@@ -13,6 +13,9 @@ import {
   ScrollText,
   Rocket,
   TrendingUp,
+  FlaskConical,
+  Layers,
+  Shield,
 } from "lucide-react";
 
 const navGroups = [
@@ -20,6 +23,13 @@ const navGroups = [
     label: "Overview",
     links: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Live Demo",
+    links: [
+      { href: "/simulate", label: "Simulator", icon: FlaskConical },
+      { href: "/batch", label: "Batch Runner", icon: Layers },
       { href: "/orchestrator", label: "Orchestrator", icon: Rocket },
     ],
   },
@@ -43,6 +53,7 @@ const navGroups = [
   {
     label: "System",
     links: [
+      { href: "/policies", label: "Policy Engine", icon: Shield },
       { href: "/audit", label: "Audit Trail", icon: ScrollText },
     ],
   },
@@ -55,14 +66,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 4,
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <div
             style={{
               width: 32,
@@ -133,7 +137,7 @@ export default function Sidebar() {
         AI Revenue Recovery Engine
         <br />
         <span style={{ color: "var(--gold)", opacity: 0.7 }}>
-          Powered by Gemini
+          Powered by Gemini Flash
         </span>
       </div>
     </aside>
