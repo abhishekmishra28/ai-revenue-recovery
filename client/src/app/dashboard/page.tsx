@@ -57,16 +57,16 @@ export default function DashboardPage() {
         const [casesRes, outcomesRes, attrRes, auditRes] = await Promise.all([
           api.recoveryCases.list(),
           api.outcomes.list(),
-          api.revenueAttribution.list(),
-          api.audit.all(),
+          api.revenueAttributions.list(),
+          api.auditEvents.list(),
         ]);
 
         if (cancelled) return;
 
-        setRecoveryCases(casesRes.data ?? []);
-        setOutcomes(outcomesRes.data ?? []);
-        setAttributions(attrRes.data ?? []);
-        setAuditEvents(auditRes.data ?? []);
+        setRecoveryCases((casesRes as unknown as RecoveryCase[]) ?? []);
+        setOutcomes((outcomesRes as unknown as RecoveryOutcome[]) ?? []);
+        setAttributions((attrRes as unknown as RevenueAttribution[]) ?? []);
+        setAuditEvents((auditRes as unknown as AuditEvent[]) ?? []);
       } catch (err) {
         if (cancelled) return;
         console.error("Dashboard load failed:", err);

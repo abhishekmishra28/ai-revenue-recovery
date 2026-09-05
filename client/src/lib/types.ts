@@ -202,3 +202,19 @@ export interface BatchItem {
   durationMs?: number;
   recoveredAmount?: number;
 }
+
+export interface Policy {
+  id: string;
+  merchantId: string;
+  name: string;
+  actionType: string;
+  enabled: boolean;
+  maxAmount?: string | null;
+  maxAttempts?: number | null;
+  cooldownSeconds?: number | null;
+  configuration?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  merchant?: { id: string; name: string };
+}
+

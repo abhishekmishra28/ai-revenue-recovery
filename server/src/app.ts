@@ -21,6 +21,7 @@ import policyEngineRoutes from "./modules/policy-engine/policy-engine.routes";
 import auditRoutes from "./modules/audit/audit.routes";
 import recoveryOrchestratorRoutes from "./modules/recovery-orchestrator/recovery-orchestrator.routes";
 import simulateRoutes from "./modules/simulate/simulate.routes";
+import policiesRoutes from "./modules/policies/policies.routes";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
 
@@ -53,6 +54,7 @@ app.use(
   recoveryOrchestratorRoutes,
 );
 app.use("/simulate", simulateRoutes);
+app.use("/policies", policiesRoutes);
 app.use(
   "/api-docs",
   swaggerUi.serve,

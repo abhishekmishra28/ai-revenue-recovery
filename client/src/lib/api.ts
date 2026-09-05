@@ -13,6 +13,7 @@ import type {
   HealthStatus,
   SimulateResponse,
   ScenarioInput,
+  Policy,
 } from "./types";
 
 const API_BASE =
@@ -250,6 +251,13 @@ export const api = {
         `/recovery-engine/detect/${revenueEventId}`,
         { method: "POST" }
       ),
+  },
+
+  // ─── Policies ────────────────────────────────────────────────────────────────
+  policies: {
+    list: () => fetchData<Policy[]>("/policies"),
+    byMerchant: (merchantId: string) =>
+      fetchData<Policy[]>(`/policies/merchant/${merchantId}`),
   },
 
   // ─── Simulate (Scenario Simulator + Batch Runner) ───────────────────────────
