@@ -11,6 +11,8 @@ import type {
   AuditEvent,
   RecoveryPipelineResponse,
   HealthStatus,
+  SimulateResponse,
+  ScenarioInput,
 } from "./types";
 
 const API_BASE =
@@ -248,6 +250,15 @@ export const api = {
         `/recovery-engine/detect/${revenueEventId}`,
         { method: "POST" }
       ),
+  },
+
+  // ─── Simulate (Scenario Simulator + Batch Runner) ───────────────────────────
+  simulate: {
+    runScenario: (input: ScenarioInput) =>
+      fetchData<SimulateResponse>("/simulate/scenario", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
   },
 };
 

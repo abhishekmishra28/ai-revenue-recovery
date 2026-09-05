@@ -170,3 +170,35 @@ export interface HealthStatus {
   database?: string;
   timestamp?: string;
 }
+
+export type ScenarioEventType = RevenueEvent["eventType"];
+
+export interface ScenarioInput {
+  merchantId: string;
+  eventType: ScenarioEventType;
+  amount: number;
+  currency: string;
+  paymentMethod?: "CARD" | "UPI" | "NET_BANKING" | "WALLET" | "OTHER";
+  failureCode?: string;
+  failureReason?: string;
+  subscriptionPlan?: string;
+  checkoutItems?: number;
+}
+
+export interface SimulateResponse extends RecoveryPipelineResponse {
+  meta: {
+    durationMs: number;
+    merchantName: string;
+  };
+}
+
+export interface BatchItem {
+  id: string;
+  scenario: ScenarioInput;
+  label: string;
+  status: "queued" | "running" | "error" | SimulateResponse["status"];
+  result?: SimulateResponse;
+  error?: string;
+  durationMs?: number;
+  recoveredAmount?: number;
+}
